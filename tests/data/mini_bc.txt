@@ -1,0 +1,47 @@
+# A small instance in the Burke & Curtois text format, written by hand for the tests.
+SECTION_HORIZON
+# All instances start on a Monday
+# The horizon length in days:
+7
+
+SECTION_SHIFTS
+# ShiftID, Length in mins, Shifts which cannot follow this shift | separated
+E,480,
+L,600,E
+
+SECTION_STAFF
+# ID, MaxShifts, MaxTotalMinutes, MinTotalMinutes, MaxConsecutiveShifts, MinConsecutiveShifts, MinConsecutiveDaysOff, MaxWeekends
+A,E=7|L=7,2400,1440,4,2,2,1
+B,E=5|L=0,2400,960,5,1,1,1
+C,E=7|L=3,2880,1920,3,2,1,0
+
+SECTION_DAYS_OFF
+# EmployeeID, DayIndexes (start at zero)
+A,0
+C,2,3
+
+SECTION_SHIFT_ON_REQUESTS
+# EmployeeID, Day, ShiftID, Weight
+A,1,E,2
+B,4,E,3
+
+SECTION_SHIFT_OFF_REQUESTS
+# EmployeeID, Day, ShiftID, Weight
+C,5,L,1
+
+SECTION_COVER
+# Day, ShiftID, Requirement, Weight for under, Weight for over
+0,E,1,100,1
+0,L,1,100,1
+1,E,2,100,1
+1,L,0,100,1
+2,E,1,100,1
+2,L,1,100,1
+3,E,1,100,1
+3,L,1,100,1
+4,E,2,100,1
+4,L,1,100,1
+5,E,1,100,1
+5,L,0,100,1
+6,E,1,100,1
+6,L,1,50,2
