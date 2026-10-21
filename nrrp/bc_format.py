@@ -47,6 +47,33 @@ HEADERS = {
 }
 
 
+# Published table of schedulingbenchmarks.org/nrp (retrieved 2026-10-11):
+# name -> (weeks, employees, shift types, best known objective value).
+PUBLISHED = {
+    "Instance1": (2, 8, 1, 607), "Instance2": (2, 14, 2, 828), "Instance3": (2, 20, 3, 1001),
+    "Instance4": (4, 10, 2, 1716), "Instance5": (4, 16, 2, 1143), "Instance6": (4, 18, 3, 1950),
+    "Instance7": (4, 20, 3, 1056), "Instance8": (4, 30, 4, 1300), "Instance9": (4, 36, 4, 439),
+    "Instance10": (4, 40, 5, 4631), "Instance11": (4, 50, 6, 3443), "Instance12": (4, 60, 10, 4040),
+    "Instance13": (4, 120, 18, 1348), "Instance14": (6, 32, 4, 1278), "Instance15": (6, 45, 6, 3828),
+    "Instance16": (8, 20, 3, 3225), "Instance17": (8, 32, 4, 5746), "Instance18": (12, 22, 3, 4459),
+    "Instance19": (12, 40, 5, 3149), "Instance20": (26, 50, 6, 4769), "Instance21": (26, 100, 8, 21133),
+    "Instance22": (52, 50, 10, 30241), "Instance23": (52, 100, 16, 17285),
+    "Instance24": (52, 150, 32, 40439),
+}
+
+
+def published_mismatch(inst: Instance) -> str | None:
+    """None if the instance has the size the published table gives for its name
+    (or the name is not in the table); otherwise a description of the mismatch."""
+    if inst.name not in PUBLISHED:
+        return None
+    weeks, n_emp, n_shifts, _ = PUBLISHED[inst.name]
+    got, want = (inst.n_days, inst.n_emp, inst.n_shifts), (7 * weeks, n_emp, n_shifts)
+    if got == want:
+        return None
+    return f"{inst.name}: parsed {got} (days, employees, shifts), published {want}"
+
+
 class FormatError(ValueError):
     pass
 
