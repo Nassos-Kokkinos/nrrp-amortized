@@ -65,7 +65,7 @@ class RosterEnv:
         "PREV": "one-hot of the shift worked on d-1 (width k)",
         "G_PROGRESS": "t / T",
         "G_DAY": "(d + 1) / m, the paper's d_t / m with 1-indexed days",
-        "G_FILL": "employees already on (d, s) / max(rho_{d,s}, 1)",
+        "G_FILL": "employees already on (d, s) / max(rho_{d,s}, 1), clipped to 1",
         "G_SLOTS_LEFT": "(rho_bar_{d,s} - slots of the pair already decided) / rho_bar_{d,s}",
         "G_ADMISSIBLE": "|M(s_t)| / (n + 1)",
         "G_OVERCOVER": "1 if filling the slot over-covers (f >= rho_{d,s})",
@@ -301,7 +301,7 @@ class RosterEnv:
     def _slot_features(self) -> None:
         G = self.G
         G[self.G_PROGRESS] = self.t / self.T
-        G[self.G_FILL] = self.f * self.inv_rho[self.cd, self.cs]
+        G[self.G_FILL] = min(self.f * self.inv_rho[self.cd, self.cs], 1.0)
         G[self.G_SLOTS_LEFT] = (self.rb - self.k) / self.rb
         G[self.G_ADMISSIBLE] = self.n_allowed / (self.I + 1)
         G[self.G_OVERCOVER] = float(self.f >= self.rho_ds)

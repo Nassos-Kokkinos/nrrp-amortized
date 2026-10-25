@@ -134,7 +134,7 @@ def features_from_scratch(env: RosterEnv) -> np.ndarray:
     f = int(np.count_nonzero(roster[:, d] == s))
     G[env.G_PROGRESS] = t / T
     G[env.G_DAY] = (d + 1) / D
-    G[env.G_FILL] = f / max(inst.rho[d, s], 1)
+    G[env.G_FILL] = min(f / max(inst.rho[d, s], 1), 1.0)
     G[env.G_SLOTS_LEFT] = (rho_bar[d, s] - k) / rho_bar[d, s]
     G[env.G_ADMISSIBLE] = mask.sum() / (I + 1)
     G[env.G_OVERCOVER] = float(f >= inst.rho[d, s])
