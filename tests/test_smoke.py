@@ -16,10 +16,11 @@ def inst():
 
 @pytest.mark.parametrize("profile", list(TEST_PROFILES))
 @pytest.mark.parametrize("regime", ["construction", "rerostering"])
-@pytest.mark.parametrize("size", [(5, 7, 3), (8, 14, 2)])
-def test_smoke(size, regime, profile):
+@pytest.mark.parametrize("size, extras", [((5, 7, 3), False), ((8, 14, 2), True)])
+def test_smoke(size, extras, regime, profile):
     """Prop. 2 per step and in total, Prop. 3, mask, state and features (nrrp.validate)."""
-    r = smoke(synthetic_instance(*size, seed=1), TEST_PROFILES[profile], regime=regime, episodes=4)
+    inst = synthetic_instance(*size, seed=1, skills=extras, min_cover=extras)
+    r = smoke(inst, TEST_PROFILES[profile], regime=regime, episodes=4)
     assert r.ok, Report.HEADER + "\n" + r.line()
 
 
@@ -38,8 +39,8 @@ class PerSlotCover(RosterEnv):
         k, f, p, d, s = self.k, self.f, self.p, self.cd, self.cs
         obs, r, done, info = super().step(a)
         if a < self.I:
-            r += self.cov_inc[p][f]
-        rho = self.ctx.rho[d, s]
+            r += self.fill_inc[p][f]
+        rho = self.inst.rho[d, s]
         if a == self.I and k < rho:
             r -= self.inst.w_under[d, s]
         if a < self.I and k >= rho:
@@ -48,27 +49,30 @@ class PerSlotCover(RosterEnv):
 
 
 class NoHistoryConstant(RosterEnv):
-    """Fix 1b reverted: K holds c^req and the open pairs' C(0), but not the frozen history."""
+    """Fix 1b reverted: c^con holds c^req and the open pairs' C(0), but not the frozen history."""
 
     def _setup_context(self, ctx):
         super()._setup_context(ctx)
         inst = self.inst
-        open_ = np.zeros_like(ctx.rho, bool)
+        open_ = np.zeros_like(inst.rho, bool)
         open_[ctx.d_xi:] = True
-        self.K = inst.on_req.sum() + cover_cost(0, ctx.rho, inst.w_under, inst.w_over)[open_].sum()
+        self.c_con = inst.on_req.sum() + cover_cost(0, inst.rho, inst.w_under, inst.w_over)[open_].sum()
 
 
 class ForgetsMaxConsecutive(RosterEnv):
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
-        self.masked = tuple(c for c in self.masked if c.name != "max_consecutive_shifts")
+        self.pre = tuple(c for c in self.pre if c.name != "max_consecutive_shifts")
 
 
-class StaleMinutesFeature(RosterEnv):
+class StaleCountFeature(RosterEnv):
+    """The per-step update of the assigned row is skipped for one feature."""
+
     def step(self, a):
-        keep = self.E[:, self.MINUTES].copy()
+        keep = self.E[:, self.COUNT_S].copy()
         out = super().step(a)
-        self.E[:, self.MINUTES] = keep
+        if not self.done and self.k > 0:       # still inside the same pair
+            self.E[:, self.COUNT_S] = keep
         return out
 
 
@@ -76,7 +80,7 @@ class StaleMinutesFeature(RosterEnv):
     (PerSlotCover, "construction"),
     (NoHistoryConstant, "rerostering"),
     (ForgetsMaxConsecutive, "construction"),
-    (StaleMinutesFeature, "construction"),
+    (StaleCountFeature, "construction"),
 ])
 def test_validator_catches(mutant, regime):
     inst = synthetic_instance(8, 21, 3, seed=5)

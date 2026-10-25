@@ -95,14 +95,22 @@ def test_binary_roundtrip():
 def test_context_validation():
     inst = synthetic_instance(4, 7, 2, seed=0)
     ctx = Context(inst)
-    assert ctx.is_construction and (ctx.y0 == OFF).all()
+    assert ctx.is_construction and (ctx.published == OFF).all()
     with pytest.raises(ValueError, match="needs a published roster"):
         Context(inst, d_xi=2)
     absent = np.zeros((4, 7), bool)
     absent[0, 1] = True
     with pytest.raises(ValueError, match="before d_xi"):
-        Context(inst, d_xi=3, y0=np.full((4, 7), OFF), absent=absent)
-    rho = inst.rho.copy()
-    rho[0, 0] += 1
-    with pytest.raises(ValueError, match="cover before d_xi"):
-        Context(inst, d_xi=2, y0=np.full((4, 7), OFF), rho=rho)
+        Context(inst, d_xi=3, published=np.full((4, 7), OFF), absent=absent)
+
+
+def test_skills_and_minimum_cover():
+    inst = synthetic_instance(6, 7, 3, seed=4, skills=True, min_cover=True)
+    assert inst.n_skills == 2 and inst.eligible.shape == (6, 3)
+    assert inst.eligible[:, 0].all()                                  # shift 0 needs no skill
+    np.testing.assert_array_equal(inst.eligible[:, 2], inst.skills_held[:, 1])
+    assert (inst.min_cover <= inst.rho).all() and inst.min_cover.any()
+    plain = synthetic_instance(6, 7, 3, seed=4)
+    assert plain.n_skills == 0 and plain.eligible.all() and not plain.min_cover.any()
+    with pytest.raises(ValueError, match="no minimum cover and no skills"):
+        format_bc(inst)

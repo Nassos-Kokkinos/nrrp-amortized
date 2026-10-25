@@ -1,6 +1,7 @@
-"""Constraint types of the Burke & Curtois data model.
+"""Constraint types: the hard constraints (3)-(10) of the paper, the minimum-rest
+constraint, and the weekend cap.
 
-Each type defines three things, side by side:
+Each row type (a constraint on one employee's row) defines three things, side by side:
 
 ``violation_row(i, row, ctx)``
     The reference definition: the violation amount of employee i's row (shift
@@ -10,8 +11,10 @@ Each type defines three things, side by side:
 ``prefix_monotone``
     True iff every truncation of a satisfying roster under the environment's
     day-major slot order (undecided slots empty) still satisfies the
-    constraint. This is the property of Lemma 1 that makes masking sound and
-    complete; :func:`find_truncation_counterexample` tests the flag.
+    constraint (equivalently, Definition 2: a violated partial roster has no
+    satisfying completion). Lemma 1 sorts the constraints by this property; the
+    hard prefix-monotone ones form H^pre and are enforced by the mask.
+    :func:`find_truncation_counterexample` tests the flag.
 
 ``delta(st, d, s)``
     The change in each employee's violation if that employee were assigned
@@ -22,6 +25,10 @@ Each type defines three things, side by side:
     increment the reward charges; for a hard prefix-monotone constraint the
     mask is ``delta == 0`` (the prefix satisfies it, so the assignment keeps it
     satisfied iff the increment is zero).
+
+Minimum coverage (4) is a column constraint, on the staffing of a (d, s) pair;
+it has ``scope = "column"``, a (m, k) violation array, and per-fill increments
+instead of a per-employee delta. It is not prefix-monotone.
 
 ``st`` is any object with the attributes of :class:`RosterState`, which defines
 them from a partial roster. The environment maintains the same attributes
@@ -72,17 +79,17 @@ class RosterState:
     ==============  =======  ===================================================
     """
 
-    def __init__(self, ctx: Context, y: np.ndarray, d: int):
+    def __init__(self, ctx: Context, roster: np.ndarray, d: int):
         inst = ctx.instance
         I, S = inst.n_emp, inst.n_shifts
         self.inst, self.ctx, self.d = inst, ctx, d
         self.rows = np.arange(I)
         self.forbidden_ext = extended_forbidden(inst.forbidden)
-        y = np.asarray(y)
-        w = y != OFF
-        self.prev = y[:, d - 1].astype(np.int64) if d > 0 else np.full(I, OFF, np.int64)
-        self.count = (y[:, :, None] == np.arange(S)).sum(axis=1).astype(np.int64)
-        self.minutes = np.where(w, inst.shift_len[np.where(w, y, 0)], 0).sum(axis=1).astype(np.int64)
+        roster = np.asarray(roster)
+        w = roster != OFF
+        self.prev = roster[:, d - 1].astype(np.int64) if d > 0 else np.full(I, OFF, np.int64)
+        self.count = (roster[:, :, None] == np.arange(S)).sum(axis=1).astype(np.int64)
+        self.minutes = np.where(w, inst.shift_len[np.where(w, roster, 0)], 0).sum(axis=1).astype(np.int64)
         self.run_work = trailing_run(w, d)
         self.run_off = trailing_run(~w, d)
         wk = inst.weekend_of_day
@@ -101,16 +108,18 @@ def extended_forbidden(forbidden: np.ndarray) -> np.ndarray:
 
 class Constraint:
     name = ""
+    paper = ""          # where the paper states it
+    scope = "row"
     prefix_monotone = False
     unit = ""
-    why = ""  # one-line argument for the prefix_monotone flag
+    why = ""            # one-line argument for the prefix_monotone flag
 
     def violation_row(self, i: int, row: np.ndarray, ctx: Context) -> float:
         raise NotImplementedError
 
-    def violation(self, y: np.ndarray, ctx: Context) -> np.ndarray:
-        """(I,) violation amount of every row."""
-        return np.array([self.violation_row(i, y[i], ctx) for i in range(y.shape[0])], dtype=float)
+    def violation(self, roster: np.ndarray, ctx: Context) -> np.ndarray:
+        """(n,) violation amount of every row."""
+        return np.array([self.violation_row(i, roster[i], ctx) for i in range(roster.shape[0])], dtype=float)
 
     def delta(self, st, d: int, s) -> np.ndarray:
         raise NotImplementedError
@@ -121,6 +130,7 @@ class Constraint:
 
 class ShiftRotation(Constraint):
     name, prefix_monotone, unit = "shift_rotation", True, "forbidden successions"
+    paper = "(7)"
     why = "removing assignments cannot create a forbidden pair of consecutive shifts"
 
     def violation_row(self, i, row, ctx):
@@ -134,6 +144,7 @@ class ShiftRotation(Constraint):
 
 class MaxShiftsPerType(Constraint):
     name, prefix_monotone, unit = "max_shifts_per_type", True, "shifts"
+    paper = "(10)"
     why = "upper bound on a count"
 
     def violation_row(self, i, row, ctx):
@@ -147,6 +158,7 @@ class MaxShiftsPerType(Constraint):
 
 class MaxTotalMinutes(Constraint):
     name, prefix_monotone, unit = "max_total_minutes", True, "minutes"
+    paper = "(5), upper bound"
     why = "upper bound on a sum"
 
     def violation_row(self, i, row, ctx):
@@ -161,6 +173,7 @@ class MaxTotalMinutes(Constraint):
 
 class MinTotalMinutes(Constraint):
     name, prefix_monotone, unit = "min_total_minutes", False, "minutes"
+    paper = "(5), lower bound"
     why = "lower bound on a sum: a truncation removes minutes"
 
     def violation_row(self, i, row, ctx):
@@ -175,6 +188,7 @@ class MinTotalMinutes(Constraint):
 
 class MaxConsecutiveShifts(Constraint):
     name, prefix_monotone, unit = "max_consecutive_shifts", True, "days over the limit"
+    paper = "(8)"
     why = "a truncation can only shorten work runs"
 
     def violation_row(self, i, row, ctx):
@@ -189,6 +203,7 @@ class MaxConsecutiveShifts(Constraint):
 
 class MinConsecutiveShifts(Constraint):
     name, prefix_monotone, unit = "min_consecutive_shifts", False, "days short"
+    paper = "(9)"
     why = "cutting inside a work run leaves a short run that no longer touches the end"
 
     def violation_row(self, i, row, ctx):
@@ -208,6 +223,7 @@ class MinConsecutiveShifts(Constraint):
 
 class MinConsecutiveDaysOff(Constraint):
     name, prefix_monotone, unit = "min_consecutive_days_off", True, "days short"
+    paper = "(9) with 1 - y, parameter R^min"
     why = ("day-major order plus the end-of-horizon exemption: a truncation turns the run "
            "containing the cut into a trailing off-run, which is exempt; earlier runs are unchanged")
 
@@ -225,6 +241,7 @@ class MinConsecutiveDaysOff(Constraint):
 
 class MaxWeekends(Constraint):
     name, prefix_monotone, unit = "max_weekends", True, "weekends"
+    paper = "weekend cap (Remark 1)"
     why = "upper bound on the number of worked weekends"
 
     def violation_row(self, i, row, ctx):
@@ -241,6 +258,7 @@ class MaxWeekends(Constraint):
 
 class DaysOff(Constraint):
     name, prefix_monotone, unit = "days_off", True, "assignments"
+    paper = "(6), U"
     why = "forbids individual assignments"
 
     def violation_row(self, i, row, ctx):
@@ -253,6 +271,7 @@ class DaysOff(Constraint):
 class Unavailability(Constraint):
     """Absences introduced by the disruption xi. Always hard."""
     name, prefix_monotone, unit = "unavailability", True, "assignments"
+    paper = "(6), A_xi in U(phi)"
     why = "forbids individual assignments"
 
     def violation_row(self, i, row, ctx):
@@ -262,11 +281,58 @@ class Unavailability(Constraint):
         return st.ctx.absent[:, d].astype(float)
 
 
+class Skills(Constraint):
+    """kappa_s not in Q_i: an employee may not work a shift whose skill they lack."""
+    name, prefix_monotone, unit = "skills", True, "assignments"
+    paper = "(6), kappa_s not in Q_i"
+    why = "forbids individual assignments"
+
+    def violation_row(self, i, row, ctx):
+        worked = row != OFF
+        return float(np.count_nonzero(~ctx.instance.eligible[i, row[worked].astype(np.int64)]))
+
+    def delta(self, st, d, s):
+        return (~st.inst.eligible[st.rows, s]).astype(float)
+
+
+class MinCoverage(Constraint):
+    """sum_i x_{i,d,s} >= r_{d,s}, a constraint on a column (d, s), not on a row."""
+    name, prefix_monotone, unit = "min_coverage", False, "employees short"
+    paper = "(4)"
+    scope = "column"
+    why = "a truncation removes staff from a pair"
+
+    def violation(self, roster, ctx):
+        """(m, k) shortfall max(r - n, 0) of every pair."""
+        inst = ctx.instance
+        n = roster_counts(roster, inst.n_shifts)
+        return np.maximum(inst.min_cover - n, 0).astype(float)
+
+    def increments(self, ctx: Context, d: int, s: int, n_max: int) -> np.ndarray:
+        """(n_max,) change in the shortfall of (d, s) when its staffing goes from f to f + 1."""
+        r = int(ctx.instance.min_cover[d, s])
+        f = np.arange(n_max + 1)
+        return np.diff(np.maximum(r - f, 0)).astype(float)
+
+    def violation_row(self, i, row, ctx):
+        raise TypeError("min_coverage constrains a (d, s) pair, not a row")
+
+    def delta(self, st, d, s):
+        raise TypeError("min_coverage has per-fill increments, not a per-employee delta")
+
+
+def roster_counts(roster: np.ndarray, n_shifts: int) -> np.ndarray:
+    """(m, k) number of employees on each (d, s)."""
+    roster = np.asarray(roster)
+    return (roster[:, :, None] == np.arange(n_shifts)).sum(axis=0)
+
+
 CONSTRAINTS: dict = {c.name: c for c in (
     ShiftRotation(), MaxShiftsPerType(), MaxTotalMinutes(), MinTotalMinutes(),
     MaxConsecutiveShifts(), MinConsecutiveShifts(), MinConsecutiveDaysOff(),
-    MaxWeekends(), DaysOff(), Unavailability(),
+    MaxWeekends(), DaysOff(), Unavailability(), Skills(), MinCoverage(),
 )}
+ROW_CONSTRAINTS: dict = {n: c for n, c in CONSTRAINTS.items() if c.scope == "row"}
 ALWAYS_HARD = ("unavailability",)
 
 
@@ -313,6 +379,8 @@ def find_truncation_counterexample(constraint: Constraint, ctx: Context, rng: np
     Returns (number of satisfying rows examined, counterexample or None); a
     counterexample is (employee, row, truncated row).
     """
+    if constraint.scope != "row":
+        raise ValueError(f"{constraint.name} is not a row constraint")
     inst = ctx.instance
     n_ok = 0
     for _ in range(n_rows):

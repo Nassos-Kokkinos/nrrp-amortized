@@ -1,11 +1,11 @@
 import numpy as np
 import pytest
 
-from nrrp.constraints import (CONSTRAINTS, RosterState, find_truncation_counterexample,
-                              random_block_row, trailing_run, true_runs)
+from nrrp.constraints import (CONSTRAINTS, ROW_CONSTRAINTS, RosterState, find_truncation_counterexample,
+                              random_block_row, roster_counts, trailing_run, true_runs)
 from nrrp.generator import synthetic_instance
 from nrrp.instance import OFF, Context, Instance
-from nrrp.profile import BURKE_CURTOIS, ConstraintProfile
+from nrrp.profile import BURKE_CURTOIS, ConstraintProfile, burke_curtois_training
 
 _ = OFF
 
@@ -90,17 +90,17 @@ def test_days_off_and_unavailability():
 # -------------------------------------------------------- Lemma 1, as an executable test
 
 def binding_context(seed=0):
-    """Synthetic instance with every constraint able to bind, plus absences."""
-    inst = synthetic_instance(6, 21, 3, seed=seed)
+    """Synthetic instance with every row constraint able to bind, plus absences and skills."""
+    inst = synthetic_instance(6, 21, 3, seed=seed, skills=True)
     inst.min_consec[:] = 3
     inst.min_consec_off[:] = 2
     rng = np.random.default_rng(seed)
     return Context(inst, absent=rng.random((6, 21)) < 0.1)
 
 
-@pytest.mark.parametrize("name", list(CONSTRAINTS))
+@pytest.mark.parametrize("name", list(ROW_CONSTRAINTS))
 def test_prefix_monotone_flag_matches_a_search_for_counterexamples(name):
-    c = CONSTRAINTS[name]
+    c = ROW_CONSTRAINTS[name]
     n_ok, cex = find_truncation_counterexample(c, binding_context(), np.random.default_rng(1), 3000)
     if c.prefix_monotone:
         assert cex is None, f"{name} is flagged prefix-monotone but {cex} is a counterexample"
@@ -111,11 +111,18 @@ def test_prefix_monotone_flag_matches_a_search_for_counterexamples(name):
 
 def test_burke_curtois_profile_split():
     p = BURKE_CURTOIS
-    assert {c.name for c in p.masked} == {
+    assert {c.name for c in p.pre} == {
         "shift_rotation", "max_shifts_per_type", "max_total_minutes", "max_consecutive_shifts",
-        "min_consecutive_days_off", "max_weekends", "days_off", "unavailability"}
+        "min_consecutive_days_off", "max_weekends", "days_off", "unavailability", "skills"}
     assert {c.name for c in p.ter} == {"min_total_minutes", "min_consecutive_shifts"}
-    assert p.penalties == ()
+    assert p.penalties == () and p.off == ("min_coverage",)
+
+
+def test_training_profile_needs_explicit_weights():
+    p = burke_curtois_training(w_min_minutes=0.2, w_min_consecutive=30)
+    assert p.ter == () and {c.name for c in p.pre} == {c.name for c in BURKE_CURTOIS.pre}
+    with pytest.raises(TypeError):
+        burke_curtois_training()
 
 
 def test_profile_with_penalised_and_validation():
@@ -159,7 +166,7 @@ def test_delta_equals_change_in_violation(seed):
         st = RosterState(ctx, y, d)
         free = np.flatnonzero(y[:, d] == OFF)
         for s in range(inst.n_shifts):
-            for name, c in CONSTRAINTS.items():
+            for name, c in ROW_CONSTRAINTS.items():
                 got = c.delta(st, d, s)
                 for i in free:
                     after = y[i].copy()
@@ -175,7 +182,33 @@ def test_delta_accepts_one_shift_per_employee():
     y = random_partial_roster(ctx, 9, rng)
     st = RosterState(ctx, y, 9)
     s_arr = rng.integers(inst.n_shifts, size=inst.n_emp)
-    for c in CONSTRAINTS.values():
+    for c in ROW_CONSTRAINTS.values():
         vec = c.delta(st, 9, s_arr)
         for i in range(inst.n_emp):
             assert vec[i] == c.delta(st, 9, int(s_arr[i]))[i], c.name
+
+
+def test_skills():
+    ctx = one_employee(7, skills_held=[[True, False]], skill_required=[-1, 1])
+    assert viol("skills", ctx, [0, 1, _, 1, _, 0, _]) == 2   # L needs the skill A lacks
+    st = RosterState(ctx, np.full((1, 7), OFF, np.int8), 0)
+    assert list(CONSTRAINTS["skills"].delta(st, 0, 1)) == [1.0]
+    assert list(CONSTRAINTS["skills"].delta(st, 0, 0)) == [0.0]
+
+
+def test_min_coverage_is_a_column_constraint_and_not_prefix_monotone():
+    inst = synthetic_instance(5, 7, 2, seed=0, min_cover=True)
+    ctx = Context(inst)
+    c = CONSTRAINTS["min_coverage"]
+    assert c.scope == "column" and not c.prefix_monotone
+    full = np.zeros((5, 7), np.int8)                      # everybody on shift 0 every day
+    v = c.violation(full, ctx)
+    assert v.shape == (7, 2)
+    np.testing.assert_array_equal(v[:, 0], np.maximum(inst.min_cover[:, 0] - 5, 0))
+    empty = np.full((5, 7), OFF, np.int8)                  # its truncation to nothing
+    assert c.violation(empty, ctx).sum() == inst.min_cover.sum() > 0
+    for d, s in [(0, 0), (3, 1)]:
+        inc = c.increments(ctx, d, s, 5)
+        for n in range(6):
+            assert inc[:n].sum() == max(inst.min_cover[d, s] - n, 0) - inst.min_cover[d, s]
+    assert roster_counts(full, 2)[:, 0].tolist() == [5] * 7

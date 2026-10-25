@@ -258,6 +258,8 @@ def format_bc(inst: Instance) -> str:
     """Text in the Burke & Curtois format; ``parse_bc(format_bc(inst))`` reproduces inst."""
     if inst.first_weekday != 0:
         raise ValueError("the format assumes the horizon starts on a Monday")
+    if inst.min_cover.any() or inst.n_skills:
+        raise ValueError("the format has no minimum cover and no skills")
     E, Sh = inst.employee_ids, inst.shift_ids
     out = [f"# {inst.name}, written by nrrp.bc_format", ""]
 

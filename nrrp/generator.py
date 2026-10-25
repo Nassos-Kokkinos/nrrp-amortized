@@ -17,7 +17,11 @@ from .instance import OFF, Context, Instance
 
 
 def synthetic_instance(n_emp: int = 12, n_days: int = 14, n_shifts: int = 3,
-                       seed: int = 0, name: str | None = None) -> Instance:
+                       seed: int = 0, name: str | None = None, *, skills: bool = False,
+                       min_cover: bool = False) -> Instance:
+    """``skills``: two skills, the last shift type needs the second, which about
+    half the employees hold. ``min_cover``: a hard minimum r = floor(0.6 rho).
+    Both are absent from the Burke & Curtois family and off by default."""
     if n_emp < 1 or n_days < 1 or n_shifts < 1:
         raise ValueError("need at least one employee, day and shift")
     rng = np.random.default_rng(seed)
@@ -45,22 +49,31 @@ def synthetic_instance(n_emp: int = 12, n_days: int = 14, n_shifts: int = 3,
     share = np.linspace(1.4, 0.6, S)
     share /= share.sum()
     rho = np.maximum(0, np.rint(per_day * share + rng.normal(0, 0.6, (D, S)))).astype(np.int64)
+    extra = {}
+    if skills:
+        held = np.ones((I, 2), bool)
+        held[:, 1] = rng.random(I) < 0.5
+        required = np.full(S, 0, np.int64)
+        required[0] = -1
+        required[-1] = 1 if S > 1 else -1
+        extra.update(skills_held=held, skill_required=required)
+    if min_cover:
+        extra["min_cover"] = np.floor(0.6 * rho).astype(np.int64)
     return Instance(
         name=name or f"syn{I}x{D}x{S}s{seed}", employee_ids=[f"E{i:02d}" for i in range(I)],
         shift_ids=shift_ids, n_days=D, shift_len=shift_len, forbidden=forbidden,
         max_shifts=max_shifts, max_minutes=max_minutes, min_minutes=min_minutes,
         max_consec=max_consec, min_consec=min_consec, min_consec_off=min_consec_off,
         max_weekends=max_weekends, day_off=day_off, on_req=on_req, off_req=off_req,
-        rho=rho, w_under=np.full((D, S), 100.0), w_over=np.full((D, S), 1.0))
+        rho=rho, w_under=np.full((D, S), 100.0), w_over=np.full((D, S), 1.0), **extra)
 
 
 def random_roster(instance: Instance, profile, rng: np.random.Generator, kappa: int = 1) -> np.ndarray:
     """A roster from a uniformly random masked construction.
 
-    By Prop. 3 it satisfies every hard prefix-monotone constraint of the profile,
-    so it can serve as a published roster whose frozen prefix is feasible for the
-    mask. It ignores H^ter and the objective: a stand-in until published rosters
-    come from CP-SAT.
+    By Prop. 3 it satisfies H^pre of the profile, so its frozen prefix meets the
+    assumption of Prop. 3. It ignores H^ter and the objective. Remark 5 asks for a
+    solution of the construction problem (13) instead; that comes with CP-SAT.
     """
     from .env import RosterEnv  # imported here: the environment depends on this package's core
 
@@ -70,7 +83,7 @@ def random_roster(instance: Instance, profile, rng: np.random.Generator, kappa: 
     while not done:
         allowed = np.flatnonzero(env.action_mask())
         _, _, done, _ = env.step(int(allowed[rng.integers(len(allowed))]))
-    return env.y.copy()
+    return env.roster.copy()
 
 
 def random_context(instance: Instance, profile, rng: np.random.Generator, *, mu: float = 1.0,
@@ -85,13 +98,13 @@ def random_context(instance: Instance, profile, rng: np.random.Generator, *, mu:
     D = instance.n_days
     if D < 2:
         raise ValueError("re-rostering needs at least two days")
-    y0 = random_roster(instance, profile, rng, kappa)
+    published = random_roster(instance, profile, rng, kappa)
     if d_xi is None:
         d_xi = int(rng.integers(1, D))
-    working = np.flatnonzero(y0[:, d_xi] != OFF)
+    working = np.flatnonzero(published[:, d_xi] != OFF)
     pool = working if len(working) >= n_absent else np.arange(instance.n_emp)
     absent = np.zeros((instance.n_emp, D), bool)
     for i in rng.choice(pool, size=min(n_absent, len(pool)), replace=False):
         absent[i, d_xi:d_xi + int(rng.integers(1, max_absence + 1))] = True
-    return Context(instance, d_xi=d_xi, y0=y0, absent=absent, mu=mu,
+    return Context(instance, d_xi=d_xi, published=published, absent=absent, mu=mu,
                    name=f"{instance.name}@d{d_xi}")

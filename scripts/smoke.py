@@ -28,13 +28,14 @@ LEGEND = """
 columns: ep, steps = episodes and steps run
   Prop2 Σ   worst |sum of rewards + J - target| / max(1, J), target 0 with K included, K without
   Prop2 t   worst per-step |reward + change of J|, J from scratch ("off" on large instances)
-  Prop3     total violation of masked hard constraints in the final rosters (must be 0)
+  Prop3     total violation of H^pre in the final rosters (must be 0)
   mask      steps where the mask differed from its definition
   state     incremental-state arrays that differed from the from-scratch state
   features  largest difference between the observation and its from-scratch version
-  H^ter     employees whose final row violates H^ter (random policy; work left for repair)
-profiles (weights are arbitrary test values): burke_curtois = as published, all hard;
-  soft_ter = H^ter penalised; all_soft = everything except absences penalised
+  H^ter     employees whose final row violates a row constraint of H^ter (random policy)
+profiles (weights are arbitrary test values): burke_curtois = as published (evaluation);
+  bc_training = H^ter penalised (training); all_soft = everything except absences penalised;
+  cover_hard = every constraint hard, including minimum coverage (4)
 """
 
 
@@ -63,7 +64,10 @@ def main():
             ok &= problem is None
             instances.append(inst)
     else:
-        instances = [synthetic_instance(*size, seed=args.seed) for size in [(5, 7, 3), (12, 14, 3), (20, 28, 4)]]
+        instances = [synthetic_instance(5, 7, 3, seed=args.seed),
+                     synthetic_instance(12, 14, 3, seed=args.seed, name="syn12x14x3+skills+mincover",
+                                        skills=True, min_cover=True),
+                     synthetic_instance(20, 28, 4, seed=args.seed)]
     episodes = args.episodes or (2 if args.files else 5)
 
     print("\n" + Report.HEADER)

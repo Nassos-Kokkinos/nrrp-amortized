@@ -1,16 +1,21 @@
 """Constraint profile: which constraints are hard, which penalised, for one instance family.
 
-Section 3.2: the hard/soft partition is a property of the instance family, not
-of the method. A profile assigns every constraint type in
+Remark 1: the hard/soft partition is a property of the instance family, not of
+the method. A profile gives every constraint type in
 :data:`nrrp.constraints.CONSTRAINTS` exactly one role (hard, penalised with a
 weight per violation unit, or off), and two sets follow from it:
 
-* ``masked`` = hard and prefix-monotone, enforced by the action mask (Prop. 3);
-* ``ter``    = hard and not prefix-monotone, the H^ter left to the repair step.
+* ``pre`` = H^pre, hard and prefix-monotone, enforced by the mask (32) (Prop. 3);
+* ``ter`` = H^ter, hard and not prefix-monotone, left to the repair operator.
 
-Penalised constraints enter the objective J with their weights. "At most one
-shift per employee and day" is not listed: the roster representation enforces
-it, and the environment masks employees already assigned on the current day.
+Penalised constraints enter the objective J with their weights. Constraint (3),
+at most one shift per day, is not listed: the roster representation enforces it
+and the environment masks employees already assigned on the current day.
+
+Training and evaluation may use different profiles. Evaluation uses the
+family's published partition; training may penalise the H^ter constraints as
+reward shaping, which changes the reward the policy learns from but not the
+problem it is evaluated on.
 """
 from __future__ import annotations
 
@@ -51,13 +56,13 @@ class ConstraintProfile:
                 raise ValueError(f"profile {self.name}: weight of {n} must be positive, got {w}")
 
     @property
-    def masked(self) -> tuple:
-        """Hard and prefix-monotone, in registry order: enforced by the mask."""
+    def pre(self) -> tuple:
+        """H^pre: hard and prefix-monotone, in registry order. Enforced by the mask."""
         return tuple(c for n, c in CONSTRAINTS.items() if n in self.hard and c.prefix_monotone)
 
     @property
     def ter(self) -> tuple:
-        """H^ter: hard and not prefix-monotone, left to the repair step."""
+        """H^ter: hard and not prefix-monotone. Left to the repair operator."""
         return tuple(c for n, c in CONSTRAINTS.items() if n in self.hard and not c.prefix_monotone)
 
     @property
@@ -76,14 +81,28 @@ class ConstraintProfile:
     def describe(self) -> str:
         names = lambda cs: ", ".join(c.name for c in cs) or "-"  # noqa: E731
         pen = ", ".join(f"{c.name} (w={w:g} per {c.unit})" for c, w in self.penalties) or "-"
-        return (f"profile {self.name}\n  mask  (hard, prefix-monotone): {names(self.masked)}\n"
-                f"  H^ter (hard, not prefix-monotone): {names(self.ter)}\n  penalised: {pen}\n"
-                f"  off: {', '.join(self.off) or '-'}")
+        return (f"profile {self.name}\n  H^pre (hard, prefix-monotone, masked): {names(self.pre)}\n"
+                f"  H^ter (hard, not prefix-monotone, repaired): {names(self.ter)}\n"
+                f"  penalised: {pen}\n  off: {', '.join(self.off) or '-'}")
 
 
 BURKE_CURTOIS = ConstraintProfile(
-    "burke_curtois", hard=tuple(CONSTRAINTS),
-    note="Format guide of schedulingbenchmarks.org/nrp: every constraint is hard; "
-         "the objective is shift requests plus cover.")
+    "burke_curtois",
+    hard=tuple(n for n in CONSTRAINTS if n != "min_coverage"),
+    off=("min_coverage",),
+    note="Format guide of schedulingbenchmarks.org/nrp: every constraint is hard and cover is "
+         "soft only, so (4) is vacuous. The evaluation profile for this family.")
+
+
+def burke_curtois_training(*, w_min_minutes: float, w_min_consecutive: float) -> ConstraintProfile:
+    """Training profile for the Burke & Curtois family: H^ter penalised as reward shaping.
+
+    The weights are hyperparameters, reported in Section 5; there are no defaults
+    on purpose.
+    """
+    return BURKE_CURTOIS.with_penalised(
+        {"min_total_minutes": w_min_minutes, "min_consecutive_shifts": w_min_consecutive},
+        name="burke_curtois_training")
+
 
 PROFILES = {p.name: p for p in (BURKE_CURTOIS,)}
