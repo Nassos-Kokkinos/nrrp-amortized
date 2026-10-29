@@ -12,6 +12,8 @@ dependencies = ["numpy>=1.24"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
+cp = ["ortools>=9.10"]        # CP-SAT (nrrp/cpsat.py); no wheel for Python 3.15 yet (October 2026)
+plot = ["matplotlib>=3.7"]    # figures (scripts/plot_results.py)
 
 [tool.setuptools]
 packages = ["nrrp"]
