@@ -1,0 +1,8 @@
+instance,n_emp,n_days,n_shifts,status,J,bound,gap_to_bound,best_known,gap_to_best_known,feasible,solve_seconds,build_seconds,deterministic_time,time_limit,workers,seed
+Instance1,8,14,1,OPTIMAL,607.0,607.0,0.0,607,0.0,True,0.047,0.003,0.311,60.0,8,0
+Instance2,14,14,2,OPTIMAL,828.0,828.0,0.0,828,0.0,True,0.793,0.004,10.699,60.0,8,0
+Instance3,20,14,3,OPTIMAL,1001.0,1001.0,0.0,1001,0.0,True,1.647,0.009,21.291,60.0,8,0
+Instance4,10,28,2,OPTIMAL,1716.0,1716.0,0.0,1716,0.0,True,55.67,0.007,815.275,60.0,8,0
+Instance5,16,28,2,OPTIMAL,1143.0,1143.0,0.0,1143,0.0,True,49.362,0.012,750.804,60.0,8,0
+Instance6,18,28,3,OPTIMAL,1950.0,1950.0,0.0,1950,0.0,True,19.68,0.017,271.679,60.0,8,0
+Instance7,20,28,3,FEASIBLE,1056.0,1052.0,0.003787878787878788,1056,0.0,True,60.027,0.018,805.571,60.0,8,0
