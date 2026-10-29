@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A solution of mini_bc.txt in the .roster format, written by hand for the tests.
+     Not feasible (mini_bc has no feasible roster: employee C cannot reach 1920 minutes).
+     J by hand: requests 3 (B, day 4, on E) + 1 (C, day 5, off L) = 4;
+     cover 100 (d1 E) + 100 (d2 L) + 200 (d3 E, L) + 200 (d4 E) + 100 + 1 (d5 E, L) + 100 + 50 (d6 E, L) = 851. -->
+<Roster xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="Roster.xsd">
+ <SchedulingPeriodFile>../../mini_bc.ros</SchedulingPeriodFile>
+ <Penalty>855</Penalty>
+ <Algorithm>by hand</Algorithm>
+<Employee ID="A"><Assign><Day>1</Day><Shift>E</Shift></Assign><Assign><Day>2</Day><Shift>E</Shift></Assign></Employee>
+<Employee ID="B"><Assign><Day>0</Day><Shift>L</Shift></Assign><Assign><Day>4</Day><Shift>L</Shift></Assign></Employee>
+<Employee ID="C"><Assign><Day>0</Day><Shift>E</Shift></Assign><Assign><Day> 5 </Day><Shift>L</Shift></Assign></Employee>
+ <Violations>
+  <EmployeeViolations>
+   <Employee ID="B"><Requests><Violation><ID>B</ID><Label>ShiftOn</Label><Penalty>3</Penalty></Violation></Requests></Employee>
+   <Employee ID="C"><Requests><Violation><ID>C</ID><Label>ShiftOff</Label><Penalty>1</Penalty></Violation></Requests></Employee>
+  </EmployeeViolations>
+  <CoverViolations>
+   <Violation><Shift>E</Shift><Label/><Count>1</Count><Penalty>851</Penalty><Cell>0</Cell></Violation>
+  </CoverViolations>
+ </Violations>
+</Roster>

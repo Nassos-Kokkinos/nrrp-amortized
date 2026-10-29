@@ -7,7 +7,9 @@ CP repair step for the rest.
 
 **Status.** Build order steps 1-5 are done: instance model and Burke & Curtois
 reader, constraint profiles, the objective J, the MDP environment with its mask,
-the smoke test, and the environment benchmark. The code follows the paper as
+the smoke test, and the environment benchmark. The objective and the hard
+constraints reproduce the benchmark's own values on all 50 published Burke &
+Curtois solutions (`scripts/check_solutions.py`). The code follows the paper as
 agreed on 25/10/2026 (`code-paper-agreement.md` in the project). Not yet:
 the policy network (34) and MaskablePPO training, CP repair (OR-Tools),
 experiments. Nothing here is an experimental result.
@@ -31,15 +33,16 @@ Python 3.9 or newer; the only runtime dependency so far is numpy.
 | `python scripts/smoke.py` | the theory validator on synthetic instances, as a report |
 | `python scripts/smoke.py data/raw/Instance*.txt` | the same on Burke & Curtois files, after checking each file's size against the published table |
 | `python scripts/bench_env.py [files]` | environment throughput, random masked rollouts, steps/s |
+| `python scripts/check_solutions.py data/raw/solutions/*.roster` | J and feasibility of each published solution against its published value |
 
-Instance files are not in the repository; see [data/README.md](data/README.md).
+Instance and solution files are not in the repository; see [data/README.md](data/README.md).
 
 ## Layout
 
 | Module | Paper |
 |---|---|
 | `nrrp/instance.py` | instance data (Table 1); context phi = (Inst, x°, xi), Definition 1 |
-| `nrrp/bc_format.py` | Burke & Curtois text format, published sizes and best known values |
+| `nrrp/bc_format.py` | Burke & Curtois text format, published sizes and best known values; the `.roster` solution format (x°) |
 | `nrrp/constraints.py` | constraints (3)-(10), minimum rest, weekend cap: reference violation, prefix-monotone flag, incremental delta; Lemma 1 as an executable search |
 | `nrrp/profile.py` | the hard / penalised / off partition of a family (Remark 1); derives H^pre and H^ter; evaluation and training profiles |
 | `nrrp/objective.py` | J(x; phi) (20), its per-step decomposition and c^con (Prop. 2), evaluation |

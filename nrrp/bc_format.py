@@ -20,14 +20,33 @@ SECTION_COVER               Day, ShiftID, Requirement, Weight for under,
 
 A (day, shift) pair absent from SECTION_COVER has no cover term (requirement and
 both weights 0). Errors name the file and line.
+
+Solutions. The same site publishes solutions as XML rosters, one file per
+solution named ``InstanceN.Solution.VALUE.roster`` with VALUE the objective
+value; the format is RosterBooster's (``Roster.xsd``)::
+
+    <Roster>
+      <SchedulingPeriodFile>../../Instance1.ros</SchedulingPeriodFile>
+      <Penalty>607</Penalty>                                   (optional)
+      <Employee ID="A"><Assign><Day>1</Day><Shift>D</Shift></Assign> ...</Employee>
+      ...
+    </Roster>
+
+Days start at zero, an employee-day with no ``Assign`` is a day off, and
+employee and shift IDs are those of the instance. Other elements (solver
+details, violation listings) are ignored. :func:`read_roster` turns a file into
+a roster array for a given instance; :func:`format_roster` writes one.
 """
 from __future__ import annotations
 
+import re
+import xml.etree.ElementTree as ET
+from xml.sax.saxutils import escape, quoteattr
 from pathlib import Path
 
 import numpy as np
 
-from .instance import Instance
+from .instance import OFF, Instance, empty_roster
 
 HORIZON, SHIFTS, STAFF, DAYS_OFF, ON_REQ, OFF_REQ, COVER = (
     "SECTION_HORIZON", "SECTION_SHIFTS", "SECTION_STAFF", "SECTION_DAYS_OFF",
@@ -285,3 +304,101 @@ def format_bc(inst: Instance) -> str:
 
 def write_bc(inst: Instance, path) -> None:
     Path(path).write_text(format_bc(inst), encoding="utf-8")
+
+
+# --- solutions: the XML roster format (.roster) ---------------------------------
+
+SOLUTION_NAME = re.compile(r"^(?P<instance>.+)\.Solution\.(?P<value>\d+(?:\.\d+)?)\.roster$")
+
+
+def solution_name(path) -> tuple[str, float] | None:
+    """(instance name, objective value) for a file named ``InstanceN.Solution.VALUE.roster``,
+    None for any other name."""
+    m = SOLUTION_NAME.match(Path(path).name)
+    return (m["instance"], float(m["value"])) if m else None
+
+
+def read_roster(path, inst: Instance) -> np.ndarray:
+    """The roster array of a solution file, for the instance it solves."""
+    path = Path(path)
+    return parse_roster(path.read_bytes(), inst, name=path.name)
+
+
+def _roster_root(text, name: str) -> ET.Element:
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError as e:
+        raise FormatError(f"{name}: not well-formed XML ({e})") from None
+    if root.tag != "Roster":
+        raise FormatError(f"{name}: root element is <{root.tag}>, expected <Roster>")
+    return root
+
+
+def parse_roster(text, inst: Instance, name: str = "roster") -> np.ndarray:
+    """(n, m) int8 roster array from the text (str or bytes) of a ``.roster`` file.
+
+    Refuses unknown employee or shift IDs, days outside the horizon, an employee
+    listed twice and two shifts for one employee on one day.
+    """
+    root = _roster_root(text, name)
+    eidx = {e: i for i, e in enumerate(inst.employee_ids)}
+    sidx = {s: k for k, s in enumerate(inst.shift_ids)}
+    roster = empty_roster(inst.n_emp, inst.n_days)
+    seen = set()
+    for emp in root.findall("Employee"):  # direct children; <Violations> nests other <Employee>s
+        eid = (emp.get("ID") or "").strip()
+        if eid not in eidx:
+            raise FormatError(f"{name}: unknown employee id {eid!r}")
+        if eid in seen:
+            raise FormatError(f"{name}: employee {eid!r} listed twice")
+        seen.add(eid)
+        i = eidx[eid]
+        for a in emp.findall("Assign"):
+            day_text, shift_id = (a.findtext("Day") or "").strip(), (a.findtext("Shift") or "").strip()
+            try:
+                d = int(day_text)
+            except ValueError:
+                raise FormatError(f"{name}: employee {eid!r}: day must be an integer, got {day_text!r}") from None
+            if not 0 <= d < inst.n_days:
+                raise FormatError(f"{name}: employee {eid!r}: day {d} outside 0..{inst.n_days - 1}")
+            if shift_id not in sidx:
+                raise FormatError(f"{name}: employee {eid!r}, day {d}: unknown shift id {shift_id!r}")
+            if roster[i, d] != OFF:
+                raise FormatError(f"{name}: employee {eid!r} has two shifts on day {d}")
+            roster[i, d] = sidx[shift_id]
+    return roster
+
+
+def roster_penalty(text, name: str = "roster") -> float | None:
+    """The ``<Penalty>`` element of a ``.roster`` file (str or bytes), None if absent."""
+    v = _roster_root(text, name).findtext("Penalty")
+    if v is None or not v.strip():
+        return None
+    try:
+        return float(v)
+    except ValueError:
+        raise FormatError(f"{name}: <Penalty> must be a number, got {v.strip()!r}") from None
+
+
+def format_roster(roster: np.ndarray, inst: Instance, penalty=None) -> str:
+    """A ``.roster`` file for the roster; ``parse_roster(format_roster(r, inst), inst)`` gives r back."""
+    roster = np.asarray(roster)
+    if roster.shape != (inst.n_emp, inst.n_days):
+        raise ValueError(f"roster shape {roster.shape}, instance needs {(inst.n_emp, inst.n_days)}")
+    out = ['<?xml version="1.0" encoding="UTF-8"?>',
+           '<Roster xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
+           'xsi:noNamespaceSchemaLocation="Roster.xsd">',
+           f" <SchedulingPeriodFile>{escape(inst.name)}.ros</SchedulingPeriodFile>"]
+    if penalty is not None:
+        out.append(f" <Penalty>{_num(penalty)}</Penalty>")
+    for i, eid in enumerate(inst.employee_ids):
+        days = np.flatnonzero(roster[i] != OFF)
+        out.append(f" <Employee ID={quoteattr(eid)}>" + "".join(
+            f"<Assign><Day>{d}</Day><Shift>{escape(inst.shift_ids[roster[i, d]])}</Shift></Assign>" for d in days)
+            + "</Employee>")
+    out.append("</Roster>")
+    return "\n".join(out) + "\n"
+
+
+def write_roster(roster: np.ndarray, inst: Instance, path, penalty=None) -> None:
+    Path(path).write_text(format_roster(roster, inst, penalty=penalty), encoding="utf-8")
