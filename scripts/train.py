@@ -37,6 +37,19 @@ and --w-min-consecutive, hyperparameters reported in Section 5), scaled by
 --reward-scale, c^con not charged (Remark 7), gamma = 1 so that the return is
 the objective itself (Prop. 2). Evaluation: J and feasibility under the
 published profile, with c^con.
+
+Options for scaling up (30/10/2026, after the 25x7 run barely moved from the
+uniform policy: tiny KL per update, entropy staying high): --ent-coef, --gamma
+and --gae-lambda (gamma < 1 shortens credit assignment in training only; the
+evaluation is still J), --lr-schedule linear, --target-kl, --vf-coef,
+--separate-critic (critic with its own encoder), and --init-from RUN, which
+starts from a policy trained on another size (curriculum 5x7 -> 25x7: the
+network has no parameter that depends on the number of employees).
+--pools-from RUN reuses another run's pools so that runs compare on the same
+instances.
+
+  python scripts/train.py --name 25x7-ent001-init5x7 --size 25 7 3 --pools-from mac-25x7-2M \
+      --init-from mac-5x7-1M --ent-coef 0.001 --timesteps 2000000 --eval-every 100000 --save-every 100000
 """
 from __future__ import annotations
 
@@ -158,6 +171,22 @@ def main():
     ap.add_argument("--n-epochs", type=int, default=10)
     ap.add_argument("--ent-coef", type=float, default=0.01)
     ap.add_argument("--hidden", type=int, nargs="+", default=[64, 64])
+    ap.add_argument("--gamma", type=float, default=1.0,
+                    help="PPO discount in training (1 = the undiscounted return c^con - J of Remark 7); "
+                         "evaluation is always the true J")
+    ap.add_argument("--gae-lambda", type=float, default=0.95)
+    ap.add_argument("--lr-schedule", choices=["constant", "linear"], default="constant",
+                    help="linear: lr decays to 0 over --timesteps")
+    ap.add_argument("--target-kl", type=float, default=None, help="stop an update's epochs early past this KL")
+    ap.add_argument("--vf-coef", type=float, default=0.5)
+    ap.add_argument("--clip-range", type=float, default=0.2)
+    ap.add_argument("--separate-critic", action="store_true",
+                    help="give the critic its own encoder instead of sharing the actor's")
+    ap.add_argument("--pools-from", metavar="RUN",
+                    help="copy runs/<RUN>/pools.json instead of building the pools (same instances, no CP-SAT)")
+    ap.add_argument("--init-from", metavar="RUN",
+                    help="start from the policy of runs/<RUN>/latest.zip (any number of employees, same "
+                         "shift types and --hidden); PPO's step count starts at 0")
     ap.add_argument("--seed", type=int, default=0, help="seed of PPO and of the stochastic evaluation")
     ap.add_argument("--label", default="PPO + mask", help="configuration label, groups seeds in the grid plot")
     ap.add_argument("--cp-time-limit", type=float, default=10.0, help="CP-SAT seconds per pool instance")
@@ -180,6 +209,12 @@ def main():
 
     # pools: built once, then read back on --resume / --evaluate-only so that they never change
     pools_file = run / "pools.json"
+    if args.pools_from and not pools_file.exists():
+        src = args.runs / args.pools_from / "pools.json"
+        if not src.exists():
+            sys.exit(f"{src} not found")
+        pools_file.write_text(src.read_text())
+        print(f"pools copied from {src}")
     if pools_file.exists():
         pools = json.loads(pools_file.read_text())
         if tuple(pools["size"]) != (n, m, k):
@@ -207,7 +242,8 @@ def main():
 
     config = {"args": {k_: (str(v) if isinstance(v, Path) else v) for k_, v in vars(args).items()},
               "machine": versions(), "train_profile": train_profile.describe(),
-              "eval_profile": BURKE_CURTOIS.name, "gamma": 1.0, "started": time.strftime("%Y-%m-%d %H:%M:%S %z")}
+              "eval_profile": BURKE_CURTOIS.name, "gamma": args.gamma,
+              "started": time.strftime("%Y-%m-%d %H:%M:%S %z")}
     (run / ("config.json" if not (args.resume or args.evaluate_only) else "config_resume.json")).write_text(
         json.dumps(config, indent=2) + "\n")
 
@@ -218,11 +254,29 @@ def main():
         model = MaskablePPO.load(latest, env=env, device="cpu")
         print(f"loaded {latest} at {model.num_timesteps} steps")
     else:
+        lr = args.lr if args.lr_schedule == "constant" else (lambda frac, lr0=args.lr: lr0 * frac)
         model = MaskablePPO(
-            EmployeePolicy, env, learning_rate=args.lr, n_steps=args.n_steps, batch_size=args.batch_size,
-            n_epochs=args.n_epochs, gamma=1.0, gae_lambda=0.95, clip_range=0.2, ent_coef=args.ent_coef,
-            policy_kwargs=dict(n_emp=n, n_shifts=k, hidden=tuple(args.hidden), value_hidden=(args.hidden[-1],)),
+            EmployeePolicy, env, learning_rate=lr, n_steps=args.n_steps, batch_size=args.batch_size,
+            n_epochs=args.n_epochs, gamma=args.gamma, gae_lambda=args.gae_lambda, clip_range=args.clip_range,
+            ent_coef=args.ent_coef, vf_coef=args.vf_coef, target_kl=args.target_kl,
+            policy_kwargs=dict(n_emp=n, n_shifts=k, hidden=tuple(args.hidden), value_hidden=(args.hidden[-1],),
+                               separate_critic=args.separate_critic),
             tensorboard_log=str(run / "tb"), seed=args.seed, verbose=0, device="cpu")
+        if args.init_from:
+            from stable_baselines3.common.save_util import load_from_zip_file
+
+            from nrrp.policy import transfer_state
+            src = args.runs / args.init_from / "latest.zip"
+            if not src.exists():
+                sys.exit(f"{src} not found")
+            data, params, _ = load_from_zip_file(src, device="cpu")
+            try:
+                copied = transfer_state(model.policy, params["policy"])
+            except ValueError as err:
+                sys.exit(f"--init-from {args.init_from}: {err}")
+            src_n = data["policy_kwargs"].get("n_emp")
+            print(f"policy initialised from {src} ({len(copied)} tensors; trained with {src_n} employees "
+                  f"for {data.get('num_timesteps', 0):,d} steps)")
 
     progress = run / "progress.csv"
 

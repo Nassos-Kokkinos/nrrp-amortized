@@ -92,9 +92,10 @@ def make_policy(env, **kw):
                           n_emp=env.n_emp, n_shifts=env.n_shifts, **kw)
 
 
-def test_policy_is_equivariant_in_the_employees():
+@pytest.mark.parametrize("separate", [False, True])
+def test_policy_is_equivariant_in_the_employees(separate):
     env = GymRosterEnv(pool(n=6, k=3), TRAIN)
-    pol = make_policy(env)
+    pol = make_policy(env, separate_critic=separate)
     torch.manual_seed(0)
     for p in pol.parameters():                      # random weights, not the near-uniform init
         torch.nn.init.normal_(p, std=0.5)
@@ -131,6 +132,53 @@ def test_initial_policy_is_near_uniform_and_respects_the_mask():
     for _ in range(20):
         a, _ = pol.predict(obs, action_masks=mask, deterministic=False)
         assert mask[int(a)]
+
+
+def test_separate_critic_does_not_touch_the_actor():
+    env = GymRosterEnv(pool(), TRAIN)
+    pol = make_policy(env, separate_critic=True)
+    ext = pol.mlp_extractor
+    obs = torch.as_tensor(env.reset(seed=0)[0][None])
+    logits, v = ext(obs)
+    (v.sum()).backward()
+    assert all(p.grad is None or not p.grad.abs().any() for p in ext.encoder.parameters())
+    assert any(p.grad is not None and p.grad.abs().any() for p in ext.critic_encoder.parameters())
+    torch.testing.assert_close(ext.forward_actor(obs), logits)
+    torch.testing.assert_close(ext.forward_critic(obs), v)
+
+
+@pytest.mark.parametrize("separate", [False, True])
+def test_a_policy_transfers_to_another_number_of_employees(separate):
+    from nrrp.policy import transfer_state
+    small = GymRosterEnv(pool(n=5), TRAIN)
+    big = GymRosterEnv(pool(n=8), TRAIN)
+    src = make_policy(small)
+    torch.manual_seed(1)
+    for p in src.parameters():
+        torch.nn.init.normal_(p, std=0.5)
+    dst = make_policy(big, separate_critic=separate)
+    copied = transfer_state(dst, src.state_dict())
+    assert len(copied) == len(dst.state_dict())
+    # an 8-employee state whose first 5 rows equal a 5-employee state: same scores for those 5
+    obs8 = big.reset(seed=0)[0]
+    d_psi = dst._d_psi
+    obs5 = np.concatenate([obs8[: 5 * d_psi], obs8[8 * d_psi:]]).astype(np.float32)
+    with torch.no_grad():
+        lo5, _ = src.mlp_extractor(torch.as_tensor(obs5[None]))
+        lo8, v8 = dst.mlp_extractor(torch.as_tensor(obs8[None]))
+    np.testing.assert_allclose(lo8[0, :5].numpy(), lo5[0, :5].numpy(), atol=1e-6)
+    assert float(lo8[0, -1]) == pytest.approx(float(lo5[0, -1]))
+    if separate:                                     # the critic encoder starts as a copy of the encoder
+        for a, b in zip(dst.mlp_extractor.encoder.parameters(), dst.mlp_extractor.critic_encoder.parameters()):
+            torch.testing.assert_close(a, b)
+
+
+def test_transfer_refuses_other_shift_types():
+    from nrrp.policy import transfer_state
+    src = make_policy(GymRosterEnv(pool(k=3), TRAIN))
+    dst = make_policy(GymRosterEnv(pool(k=2), TRAIN))
+    with pytest.raises(ValueError, match="different sizes"):
+        transfer_state(dst, src.state_dict())
 
 
 def test_policy_refuses_a_wrong_observation_size():
@@ -196,6 +244,22 @@ def test_train_script_end_to_end(tmp_path):
     out = run("scripts/plot_results.py", "grid", str(res_dir), "--out", str(tmp_path / "grid"))
     assert out.returncode == 0, out.stdout + out.stderr
     assert (tmp_path / "grid.pdf").stat().st_size > 1000
+
+    # scaling options: same pools without CP-SAT, initialised from the 3-employee run on 4 employees
+    out = run("scripts/train.py", "--name", "t4", "--size", "4", "7", "2", "--pools-from", "t", "--timesteps", "128",
+              *common[6:])
+    assert out.returncode != 0 and "is for size" in out.stdout + out.stderr      # pools of another size refused
+    out = run("scripts/train.py", "--name", "t2", "--timesteps", "128", "--pools-from", "t", "--init-from", "t",
+              "--separate-critic", "--gamma", "0.99", "--gae-lambda", "0.98", "--lr-schedule", "linear",
+              "--target-kl", "0.02", "--ent-coef", "0.001", *common[2:])
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "pools copied" in out.stdout and "policy initialised from" in out.stdout
+    assert "building pools" not in out.stdout
+    assert (tmp_path / "runs" / "t2" / "pools.json").read_text() == (run_dir / "pools.json").read_text()
+    cfg = json.loads((tmp_path / "runs" / "t2" / "config.json").read_text())
+    assert cfg["gamma"] == 0.99 and cfg["args"]["separate_critic"] and cfg["args"]["init_from"] == "t"
+    out = run("scripts/train.py", "--name", "t2", "--timesteps", "256", "--resume", *common[2:])
+    assert out.returncode == 0, out.stdout + out.stderr
 
     # policy alone against policy with repair, on the toy run (both forms of Algorithm 1)
     import csv
