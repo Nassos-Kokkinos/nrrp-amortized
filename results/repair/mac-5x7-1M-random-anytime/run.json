@@ -1,0 +1,83 @@
+{
+  "training_run": "mac-5x7-1M",
+  "steps": 1001472,
+  "args": {
+    "name": "mac-5x7-1M",
+    "budgets": [
+      0.0,
+      0.02,
+      0.05,
+      0.2,
+      1.0
+    ],
+    "w0": 1,
+    "first_feasible": false,
+    "source": "random",
+    "k_samples": 8,
+    "workers": 8,
+    "seed": 0,
+    "runs": "runs",
+    "results": "results/repair",
+    "out_name": null
+  },
+  "machine": {
+    "platform": "macOS-26.3-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "cpu_count": 10,
+    "python": "3.14.10",
+    "numpy": "2.5.4",
+    "torch": "2.15.0",
+    "gymnasium": "1.4.0",
+    "stable_baselines3": "2.9.2",
+    "sb3_contrib": "2.9.2",
+    "ortools": "9.15.6755"
+  },
+  "finished": "2026-10-30 16:22:07 +0200",
+  "summary": {
+    "0.0": {
+      "mean_J": 515.0625,
+      "feasible": 0.0625,
+      "mean_gap_to_cp": 471.75,
+      "mean_repair_seconds": 0.0,
+      "max_repair_seconds": 0.0,
+      "mean_ter_employees": null,
+      "mean_first_free_share": null
+    },
+    "0.02": {
+      "mean_J": 94.5,
+      "feasible": 1.0,
+      "mean_gap_to_cp": 51.1875,
+      "mean_repair_seconds": 0.02151875,
+      "max_repair_seconds": 0.0234,
+      "mean_ter_employees": 1.9375,
+      "mean_first_free_share": 0.9029761904761904
+    },
+    "0.05": {
+      "mean_J": 49.5625,
+      "feasible": 1.0,
+      "mean_gap_to_cp": 6.25,
+      "mean_repair_seconds": 0.03275625,
+      "max_repair_seconds": 0.0538,
+      "mean_ter_employees": 1.9375,
+      "mean_first_free_share": 0.9029761904761904
+    },
+    "0.2": {
+      "mean_J": 43.3125,
+      "feasible": 1.0,
+      "mean_gap_to_cp": 0.0,
+      "mean_repair_seconds": 0.042637499999999995,
+      "max_repair_seconds": 0.1953,
+      "mean_ter_employees": 1.9375,
+      "mean_first_free_share": 0.9029761904761904
+    },
+    "1.0": {
+      "mean_J": 43.3125,
+      "feasible": 1.0,
+      "mean_gap_to_cp": 0.0,
+      "mean_repair_seconds": 0.04165625,
+      "max_repair_seconds": 0.1848,
+      "mean_ter_employees": 1.9375,
+      "mean_first_free_share": 0.9029761904761904
+    }
+  }
+}

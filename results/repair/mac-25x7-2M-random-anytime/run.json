@@ -1,0 +1,83 @@
+{
+  "training_run": "mac-25x7-2M",
+  "steps": 2000896,
+  "args": {
+    "name": "mac-25x7-2M",
+    "budgets": [
+      0.0,
+      0.1,
+      0.5,
+      2.0,
+      5.0
+    ],
+    "w0": 1,
+    "first_feasible": false,
+    "source": "random",
+    "k_samples": 8,
+    "workers": 8,
+    "seed": 0,
+    "runs": "runs",
+    "results": "results/repair",
+    "out_name": null
+  },
+  "machine": {
+    "platform": "macOS-26.3-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "cpu_count": 10,
+    "python": "3.14.10",
+    "numpy": "2.5.4",
+    "torch": "2.15.0",
+    "gymnasium": "1.4.0",
+    "stable_baselines3": "2.9.2",
+    "sb3_contrib": "2.9.2",
+    "ortools": "9.15.6755"
+  },
+  "finished": "2026-10-30 16:22:04 +0200",
+  "summary": {
+    "0.0": {
+      "mean_J": 636.3125,
+      "feasible": 0.0,
+      "mean_gap_to_cp": 622.125,
+      "mean_repair_seconds": 0.0,
+      "max_repair_seconds": 0.0,
+      "mean_ter_employees": null,
+      "mean_first_free_share": null
+    },
+    "0.1": {
+      "mean_J": 16.9375,
+      "feasible": 1.0,
+      "mean_gap_to_cp": 2.75,
+      "mean_repair_seconds": 0.102575,
+      "max_repair_seconds": 0.1098,
+      "mean_ter_employees": 10.25,
+      "mean_first_free_share": 0.85
+    },
+    "0.5": {
+      "mean_J": 14.25,
+      "feasible": 1.0,
+      "mean_gap_to_cp": 0.0625,
+      "mean_repair_seconds": 0.19818750000000002,
+      "max_repair_seconds": 0.5095,
+      "mean_ter_employees": 10.25,
+      "mean_first_free_share": 0.85
+    },
+    "2.0": {
+      "mean_J": 14.1875,
+      "feasible": 1.0,
+      "mean_gap_to_cp": 0.0,
+      "mean_repair_seconds": 0.20015624999999998,
+      "max_repair_seconds": 0.5911,
+      "mean_ter_employees": 10.25,
+      "mean_first_free_share": 0.85
+    },
+    "5.0": {
+      "mean_J": 14.1875,
+      "feasible": 1.0,
+      "mean_gap_to_cp": 0.0,
+      "mean_repair_seconds": 0.21013125000000002,
+      "max_repair_seconds": 0.5243,
+      "mean_ter_employees": 10.25,
+      "mean_first_free_share": 0.85
+    }
+  }
+}
