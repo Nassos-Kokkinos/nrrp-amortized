@@ -187,10 +187,10 @@ def test_anytime_reaches_the_exact_optimum_and_is_never_worse(seed):
     ctx = Context(inst)
     exact = solve(ctx, BURKE_CURTOIS, workers=1, deterministic_limit=60)
     x = random_masked_roster(ctx, seed)
-    first = repair(x, ctx, BURKE_CURTOIS, w0=1, **QUICK)
-    anytime = repair(x, ctx, BURKE_CURTOIS, w0=1, anytime=True, **QUICK)
+    first = repair(x, ctx, BURKE_CURTOIS, w0=1, anytime=False, **QUICK)
+    anytime = repair(x, ctx, BURKE_CURTOIS, w0=1, **QUICK)                 # the default
     assert anytime.feasible and anytime.J <= first.J + 1e-9
     assert anytime.J == pytest.approx(exact.J)
     assert anytime.windows == [1, 2, 4, 8]         # doubled until the window covers the horizon (m = 7)
     assert set(anytime.statuses) == {"OPTIMAL"}
-    assert first.windows == [1]                    # Algorithm 1 as printed stops at the first success
+    assert first.windows == [1]                    # the first-feasible form stops at the first success

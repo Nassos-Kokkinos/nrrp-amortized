@@ -16,13 +16,19 @@ empty action was taken there), the variables x_{i,d,s} of every employee i. An
 employee already working another shift that day stays fixed to it, so V^∅ lets
 an off-duty employee take the slot.
 
-Algorithm 1: start at w = w0; solve the subproblem within the remaining budget;
-return its solution if one is found (optimal within N_w when the solver proves
-it); if the subproblem is proved infeasible and the window does not yet reach
-the end of the horizon, double w and retry; otherwise stop and return x^(T)
-with its violated constraints (the fallback). At the maximal window the
-subproblem is the re-rostering problem itself, so a feasible roster is returned
-whenever one exists and the budget suffices (Prop. 4).
+Algorithm 1, in its anytime form (decided 30/10/2026; the PDF of 25/10 prints
+the first-feasible form): start at w = w0 and keep the best roster x* found so
+far, initially x^(T). Solve the subproblem over N_w(x^(T)) within the remaining
+budget, starting from x*. If it returns a feasible roster better than x*, it
+becomes x*. If the subproblem was solved to optimality, or proved infeasible,
+and the window does not yet reach the end of the horizon, double w and repeat;
+otherwise stop (budget spent, or window maximal). Return x*, with its violated
+constraints if it is still infeasible (the fallback). tau_cp is then the quality
+dial of Section 4.4: a larger budget reaches wider windows, and at the maximal
+window the subproblem is the re-rostering problem itself, so the exact optimum
+is returned when the budget suffices; a feasible roster whenever one exists
+(Prop. 4). ``anytime=False`` gives the first-feasible form of the 25/10 PDF
+(return at the first window with a feasible roster), kept for comparison.
 
 Days are 0-indexed here: the window is d_xi..min(d_xi + w, m - 1) and is
 maximal once d_xi + w >= m - 1 (the paper's d_xi + w >= m, 1-indexed).
@@ -33,11 +39,11 @@ Points the paper leaves open, and the choice made here:
   time-limited, non-optimal solution), x^(T) is kept: the operator never makes
   a feasible roster worse. With an optimal subproblem this cannot happen,
   since x^(T) itself lies in N_w.
-* Algorithm 1 returns at the first feasible window, so a larger tau_cp does not
-  improve a roster once w0 yields one, whereas Section 4.4 describes tau_cp as
-  the quality dial ("as tau_cp grows the operator reaches wider windows and the
-  gap closes"). ``anytime=True`` implements that reading: keep doubling w after
-  a success while budget remains. The default is Algorithm 1 as printed.
+* The first-feasible form returns at the first feasible window, so a larger
+  tau_cp does not improve a roster once w0 yields one, contradicting the
+  quality dial of Section 4.4; measured on 30/10 (5x7x3, 16 held-out instances:
+  gap to CP-SAT 26.9 at every budget, against 0 for the anytime form at 50 ms),
+  which is why the anytime form was adopted.
 * Minimum coverage (4), a column constraint, is not covered by (41), which is
   stated for row constraints; when it is hard and violated, the variables of
   the violated pair (d, s) are freed for all employees. It is off for the
@@ -127,15 +133,15 @@ def _summary(roster, ctx, profile):
 
 def repair(roster: np.ndarray, ctx: Context, profile, *, w0: int = 1, budget: float = 1.0,
            kappa: int = 1, workers: int = 8, seed: int = 0,
-           deterministic_budget: float | None = None, anytime: bool = False) -> RepairResult:
+           deterministic_budget: float | None = None, anytime: bool = True) -> RepairResult:
     """Algorithm 1 on the roster x^(T) the policy constructed.
 
-    ``anytime=False`` is Algorithm 1 as printed: stop at the first window that yields
-    a feasible roster. ``anytime=True`` keeps widening after a success while budget
+    ``anytime=True`` (default): keep widening after a feasible window while budget
     remains (each wider subproblem hinted with the incumbent, the best roster kept),
-    so that tau_cp acts as the quality dial Section 4.4 describes; with enough budget
-    it reaches the maximal window and the exact optimum. N_w is always taken around
-    x^(T), so the neighbourhoods stay nested (Prop. 4).
+    so that tau_cp acts as the quality dial of Section 4.4; with enough budget it
+    reaches the maximal window and the exact optimum. ``anytime=False``: the
+    first-feasible form of the 25/10 PDF. N_w is always taken around x^(T), so the
+    neighbourhoods stay nested (Prop. 4).
 
     ``profile``: the evaluation profile; all its hard constraints (H^pre and H^ter)
     are imposed and J is its objective. ``budget``: tau_cp, wall-clock seconds for

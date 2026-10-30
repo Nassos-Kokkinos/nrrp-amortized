@@ -50,7 +50,7 @@ Python 3.14 for the venv. Tests of a missing extra are skipped.
 | `python scripts/plot_results.py train results/train/NAME` | learning curve, feasibility curve, final gaps of a training run |
 | `python scripts/plot_results.py grid results/train/NAME-s0 results/train/NAME-s1 ... --out results/train/grid` | per-instance learning curves of several runs: one panel per held-out instance, one line per seed, one colour per `--label` (cf. Fig. 6 of the PPO paper) |
 | `tensorboard --logdir runs` | training curves while a run is going |
-| `python scripts/eval_repair.py --name NAME --budgets 0 0.1 0.5 2 [--anytime]` | policy alone (tau_cp = 0) against policy with repair, per held-out instance; results to `results/repair/NAME/` |
+| `python scripts/eval_repair.py --name NAME --budgets 0 0.1 0.5 2 [--first-feasible]` | policy alone (tau_cp = 0) against policy with repair, per held-out instance; results to `results/repair/NAME-anytime/` (or `NAME-first/`) |
 
 Instance and solution files are not in the repository; see [data/README.md](data/README.md).
 
@@ -67,7 +67,7 @@ Instance and solution files are not in the repository; see [data/README.md](data
 | `nrrp/cpsat.py` | CP-SAT model of (15) and of re-rostering: every constraint in its profile role, J as the objective; frozen history, absences, stability; `free` (cells or single variables) / `base` for the repair subproblem |
 | `nrrp/gym_env.py` | Gymnasium view of the MDP over a pool of same-size instances: Box observation, Discrete(n + 1), `action_masks()`, scaled reward, full J in the last step's info |
 | `nrrp/policy.py` | the network of Eq. (39) as a MaskablePPO policy: shared per-employee MLP, learned scalar for the empty action, value from the mean embedding |
-| `nrrp/repair.py` | the repair operator: neighbourhood V_w = window ∪ V^∅ ∪ V^ter (40)-(41), Algorithm 1 (escalation by doubling, budget tau_cp, fallback with the violated constraints); `anytime=True` keeps widening after a success |
+| `nrrp/repair.py` | the repair operator: neighbourhood V_w = window ∪ V^∅ ∪ V^ter (40)-(41), Algorithm 1 in its anytime form (keep widening while budget remains, best roster kept; budget tau_cp; fallback with the violated constraints); `anytime=False` is the first-feasible form of the 25/10 PDF |
 | `nrrp/generator.py` | synthetic instances; provisional disruption generator (the P of Eq. (23) is still to be specified) |
 | `nrrp/validate.py` | the smoke test: from-scratch checks of state, mask, features and rewards |
 

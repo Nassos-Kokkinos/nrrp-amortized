@@ -3,7 +3,7 @@
 
   python scripts/eval_repair.py --name mac-5x7-1M
   python scripts/eval_repair.py --name mac-5x7-1M --budgets 0 0.05 0.2 1 5 --w0 1
-  python scripts/eval_repair.py --name mac-5x7-1M --anytime      # tau_cp as a quality dial
+  python scripts/eval_repair.py --name mac-5x7-1M --first-feasible   # the first-feasible form, for comparison
 
 For every held-out instance of runs/<name>/ (pools.json, latest.zip), the policy
 builds a roster x^(T) (deterministic rollout by default, or the best of k
@@ -13,7 +13,7 @@ runs on it once per budget tau_cp in --budgets. tau_cp = 0 is the policy alone
 evaluated under the published profile (BURKE_CURTOIS), against the CP-SAT
 reference stored in pools.json.
 
-results/repair/<name>[-best][-anytime]/ (committed unless the name starts with provisional-)
+results/repair/<name>[-best]-anytime/   or   <name>[-best]-first/  with --first-feasible (committed unless the name starts with provisional-)
   results.csv   one row per (instance, tau_cp): J, feasibility, violations, window reached,
                 |V_w| per subproblem, employees in V^ter, T_policy, T_repair, J and time of CP-SAT
   run.json      machine, versions, parameters, and the summary per tau_cp
@@ -43,8 +43,9 @@ def main():
     ap.add_argument("--budgets", type=float, nargs="+", default=[0.0, 0.1, 0.5, 2.0],
                     help="tau_cp values in seconds; 0 = policy alone")
     ap.add_argument("--w0", type=int, default=1, help="initial window of Algorithm 1")
-    ap.add_argument("--anytime", action="store_true",
-                    help="keep widening after a feasible window while budget remains (see nrrp/repair.py)")
+    ap.add_argument("--first-feasible", action="store_true",
+                    help="stop at the first feasible window (the 25/10 PDF's form) instead of the anytime "
+                         "form (default; see nrrp/repair.py)")
     ap.add_argument("--source", choices=["det", "best"], default="det",
                     help="repair the deterministic rollout, or the best of --k-samples stochastic ones")
     ap.add_argument("--k-samples", type=int, default=8)
@@ -88,7 +89,7 @@ def main():
         return env.roster, info["evaluation"]
 
     out = args.results / (args.out_name or (args.name + ("-best" if args.source == "best" else "")
-                                            + ("-anytime" if args.anytime else "")))
+                                            + ("-first" if args.first_feasible else "-anytime")))
     out.mkdir(parents=True, exist_ok=True)
     budgets = sorted(set(args.budgets))
     print(f"{len(insts)} held-out {n}x{m}x{k} instances, model at {model.num_timesteps:,d} steps; "
@@ -106,7 +107,7 @@ def main():
         for tau in budgets:
             if tau > 0:
                 r = repair(x, ctx, BURKE_CURTOIS, w0=args.w0, budget=tau, kappa=kappa,
-                           workers=args.workers, seed=args.seed, anytime=args.anytime)
+                           workers=args.workers, seed=args.seed, anytime=not args.first_feasible)
                 J, feas, viol = r.J, r.feasible, r.violations
                 extra = {"window": r.window, "windows": json.dumps(r.windows), "statuses": json.dumps(r.statuses),
                          "n_free": json.dumps(r.n_free), "n_ter_employees": r.n_ter_employees,
@@ -116,7 +117,7 @@ def main():
                 J, feas, viol = ev["J"], ev["feasible"], ev["violations"]
                 extra = {"window": "", "windows": "[]", "statuses": "[]", "n_free": "[]", "n_ter_employees": "",
                          "n_empty_pairs": "", "changed_cells": 0, "repair_seconds": 0.0}
-            rows.append({"instance": inst.name, "tau_cp": tau, "w0": args.w0, "anytime": args.anytime,
+            rows.append({"instance": inst.name, "tau_cp": tau, "w0": args.w0, "anytime": not args.first_feasible,
                          "source": args.source,
                          "J_cp": rec["J_cp"], "cp_status": rec["cp_status"], "cp_seconds": rec["cp_seconds"],
                          "J_policy": ev["J"], "feasible_policy": ev["feasible"],

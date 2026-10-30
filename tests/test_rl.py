@@ -196,3 +196,18 @@ def test_train_script_end_to_end(tmp_path):
     out = run("scripts/plot_results.py", "grid", str(res_dir), "--out", str(tmp_path / "grid"))
     assert out.returncode == 0, out.stdout + out.stderr
     assert (tmp_path / "grid.pdf").stat().st_size > 1000
+
+    # policy alone against policy with repair, on the toy run (both forms of Algorithm 1)
+    import csv
+    for extra, folder in (([], "t-anytime"), (["--first-feasible"], "t-first")):
+        out = run("scripts/eval_repair.py", "--name", "t", "--runs", str(tmp_path / "runs"),
+                  "--results", str(tmp_path / "repair"), "--budgets", "0", "2", "--workers", "1", *extra)
+        assert out.returncode == 0, out.stdout + out.stderr
+        rows = list(csv.DictReader((tmp_path / "repair" / folder / "results.csv").open()))
+        assert len(rows) == 4                                          # 2 instances x 2 budgets
+        alone = [r for r in rows if float(r["tau_cp"]) == 0]
+        repaired = [r for r in rows if float(r["tau_cp"]) == 2]
+        assert all(r["J"] == r["J_policy"] and r["feasible"] == r["feasible_policy"] for r in alone)
+        assert all(r["feasible"] == "True" for r in repaired)          # pool instances are CP-feasible
+        assert all(float(r["J"]) >= float(r["J_cp"]) - 1e-6 for r in repaired)
+        assert (tmp_path / "repair" / folder / "run.json").exists()
