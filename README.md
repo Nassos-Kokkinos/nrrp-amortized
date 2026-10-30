@@ -11,10 +11,11 @@ the smoke test, and the environment benchmark. The objective and the hard
 constraints reproduce the benchmark's own values on all 50 published Burke &
 Curtois solutions (`scripts/check_solutions.py`). A CP-SAT model of the same
 problem (`nrrp/cpsat.py`) solves Instance1-3 to the published optima (607, 828,
-1001) and gives x° for instances without a published roster. The code follows
-the paper as agreed on 25/10/2026 (`code-paper-agreement.md` in the
-project). Not yet: the policy network (39) and MaskablePPO training, CP repair
-(Algorithm 1), experiments.
+1001) and gives x° for instances without a published roster. The policy of
+Eq. (39) trains with MaskablePPO over pools of instances (`scripts/train.py`),
+evaluated against CP-SAT on held-out instances. The code follows the paper as
+agreed on 25/10/2026 (`code-paper-agreement.md` in the project). Not yet:
+CP repair (Algorithm 1), the re-rostering regime of training, experiments.
 
 ## Setup
 
@@ -22,13 +23,14 @@ project). Not yet: the policy network (39) and MaskablePPO training, CP repair
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-pip install -e ".[dev,cp,plot]"
+pip install -e ".[dev,cp,plot,rl]"
 ```
 
-Python 3.9 or newer. The core needs only numpy; the extras add OR-Tools (`cp`,
-for `nrrp/cpsat.py`) and matplotlib (`plot`). OR-Tools has no wheel for Python
-3.15 yet (October 2026): use Python 3.14 or older for the venv, or install
-`".[dev]"` only, in which case the CP-SAT tests are skipped.
+Python 3.9 or newer (3.10 or newer for `rl`). The core needs only numpy; the
+extras add OR-Tools (`cp`, for `nrrp/cpsat.py`), matplotlib (`plot`) and
+PyTorch, Gymnasium, stable-baselines3, sb3-contrib, TensorBoard (`rl`, for
+training). OR-Tools has no wheel for Python 3.15 yet (October 2026): use
+Python 3.14 for the venv. Tests of a missing extra are skipped.
 
 ## Commands
 
@@ -41,6 +43,9 @@ for `nrrp/cpsat.py`) and matplotlib (`plot`). OR-Tools has no wheel for Python
 | `python scripts/check_solutions.py data/raw/solutions/*.roster` | J and feasibility of each published solution against its published value |
 | `python scripts/solve_cp.py data/raw/Instance1.txt ... --run NAME` | CP-SAT on each instance; results to `results/cp_baseline/NAME/` |
 | `python scripts/plot_results.py cp results/cp_baseline/NAME` | bar charts (PDF for LaTeX, PNG preview) of a CP-SAT run |
+| `python scripts/train.py --name NAME --size 5 7 3 --timesteps 200000` | MaskablePPO on a pool of feasible synthetic instances; Ctrl+C saves, `--resume` continues; held-out evaluation against CP-SAT |
+| `python scripts/plot_results.py train results/train/NAME` | learning curve, feasibility curve, final gaps of a training run |
+| `tensorboard --logdir runs` | training curves while a run is going |
 
 Instance and solution files are not in the repository; see [data/README.md](data/README.md).
 
@@ -55,6 +60,8 @@ Instance and solution files are not in the repository; see [data/README.md](data
 | `nrrp/objective.py` | J(x; phi) (20), its per-step decomposition and c^con (Prop. 2), evaluation |
 | `nrrp/env.py` | the MDP M(phi) of Section 3.5: slots (27), actions (28), mask (32), reward, state features (Table 2) |
 | `nrrp/cpsat.py` | CP-SAT model of (15) and of re-rostering: every constraint in its profile role, J as the objective; frozen history, absences, stability; `free`/`base` for the repair subproblem |
+| `nrrp/gym_env.py` | Gymnasium view of the MDP over a pool of same-size instances: Box observation, Discrete(n + 1), `action_masks()`, scaled reward, full J in the last step's info |
+| `nrrp/policy.py` | the network of Eq. (39) as a MaskablePPO policy: shared per-employee MLP, learned scalar for the empty action, value from the mean embedding |
 | `nrrp/generator.py` | synthetic instances; provisional disruption generator (the P of Eq. (23) is still to be specified) |
 | `nrrp/validate.py` | the smoke test: from-scratch checks of state, mask, features and rewards |
 
@@ -99,6 +106,8 @@ Instance and solution files are not in the repository; see [data/README.md](data
 
 ## Results
 
+Training checkpoints and TensorBoard logs go to `runs/<name>/` (git-ignored);
+the final evaluation of a training run goes to `results/train/<name>/`.
 `results/<experiment>/<run>/` holds one run: `results.csv` (written row by row,
 so an interrupted run keeps what it finished), `run.json` (machine, versions,
 parameters), and `figures/` from `scripts/plot_results.py`. Runs are committed;
