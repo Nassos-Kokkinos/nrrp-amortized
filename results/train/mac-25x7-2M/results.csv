@@ -1,0 +1,17 @@
+instance,J_cp,cp_status,J_det,feasible_det,gap_det,J_best_of_k,feasible_best_of_k,gap_best_of_k,k,violations_det,policy_ms_per_roster
+eval25x7x3s100000,24.0,OPTIMAL,155.0,False,5.458333333333333,52.0,False,1.1666666666666667,8,"{""min_total_minutes"": 1465.0, ""min_consecutive_shifts"": 2.0}",9.8
+eval25x7x3s100001,8.0,OPTIMAL,754.0,False,93.25,241.0,False,29.125,8,"{""min_total_minutes"": 953.0, ""min_consecutive_shifts"": 6.0}",10.08
+eval25x7x3s100002,11.0,OPTIMAL,551.0,False,49.09090909090909,558.0,False,49.72727272727273,8,"{""min_total_minutes"": 352.0}",10.36
+eval25x7x3s100003,20.0,OPTIMAL,556.0,False,26.8,53.0,False,1.65,8,"{""min_total_minutes"": 957.0, ""min_consecutive_shifts"": 3.0}",10.47
+eval25x7x3s100004,11.0,OPTIMAL,444.0,False,39.36363636363637,255.0,False,22.181818181818183,8,"{""min_total_minutes"": 1217.0, ""min_consecutive_shifts"": 6.0}",10.05
+eval25x7x3s100005,17.0,OPTIMAL,857.0,False,49.411764705882355,161.0,False,8.470588235294118,8,"{""min_total_minutes"": 1759.0, ""min_consecutive_shifts"": 2.0}",9.92
+eval25x7x3s100006,15.0,OPTIMAL,452.0,False,29.133333333333333,259.0,False,16.266666666666666,8,"{""min_total_minutes"": 110.0}",10.11
+eval25x7x3s100007,18.0,OPTIMAL,857.0,False,46.611111111111114,260.0,False,13.444444444444445,8,"{""min_total_minutes"": 1046.0}",10.61
+eval25x7x3s100008,7.0,OPTIMAL,751.0,False,106.28571428571429,449.0,False,63.142857142857146,8,"{""min_total_minutes"": 113.0, ""min_consecutive_shifts"": 2.0}",10.21
+eval25x7x3s100009,16.0,OPTIMAL,260.0,False,15.25,150.0,False,8.375,8,"{""min_total_minutes"": 28.0, ""min_consecutive_shifts"": 1.0}",10.59
+eval25x7x3s100010,26.0,OPTIMAL,467.0,False,16.96153846153846,364.0,False,13.0,8,"{""min_total_minutes"": 230.0, ""min_consecutive_shifts"": 9.0}",10.03
+eval25x7x3s100014,11.0,OPTIMAL,836.0,False,75.0,151.0,False,12.727272727272727,8,"{""min_total_minutes"": 627.0, ""min_consecutive_shifts"": 2.0}",10.55
+eval25x7x3s100015,15.0,OPTIMAL,539.0,False,34.93333333333333,45.0,False,2.0,8,"{""min_total_minutes"": 445.0}",10.21
+eval25x7x3s100016,7.0,OPTIMAL,547.0,False,77.14285714285714,149.0,False,20.285714285714285,8,"{""min_total_minutes"": 956.0, ""min_consecutive_shifts"": 1.0}",10.49
+eval25x7x3s100017,9.0,OPTIMAL,954.0,False,105.0,253.0,False,27.11111111111111,8,"{""min_total_minutes"": 892.0, ""min_consecutive_shifts"": 2.0}",10.65
+eval25x7x3s100019,12.0,OPTIMAL,748.0,False,61.333333333333336,455.0,False,36.916666666666664,8,"{""min_total_minutes"": 242.0, ""min_consecutive_shifts"": 3.0}",10.29
