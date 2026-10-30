@@ -108,28 +108,33 @@ class RosterModel:
                 self.w[i, d] = m.NewBoolVar(f"w[{i},{d}]")
                 m.Add(sum(self.x[i, d, :]) == self.w[i, d])
 
-        # cells fixed to a roster: the frozen history d < d_xi (fixed to x°) and,
-        # for repair, everything outside ``free`` (fixed to ``base``)
-        fixed = np.zeros((I, D), bool)
-        fixed[:, : ctx.d_xi] = True
-        target = ctx.published.copy()
+        # variables fixed to a roster: the frozen history d < d_xi (fixed to x°) and, for
+        # repair, every variable outside ``free`` (fixed to ``base``). ``free`` is either
+        # (n, m), whole cells (all shifts of employee i on day d), or (n, m, k), single
+        # variables x_{ids} (the slots left unfilled, V^∅ of Eq. (40), free one shift type)
+        fixed = np.zeros((I, D, S), bool)
+        fixed[:, : ctx.d_xi, :] = True
+        target = roster_to_binary(ctx.published, S)
         if free is not None:
             free = np.asarray(free, bool)
-            if free.shape != (I, D):
-                raise ValueError(f"free: expected shape {(I, D)}, got {free.shape}")
+            if free.shape == (I, D):
+                free = np.repeat(free[:, :, None], S, axis=2)
+            if free.shape != (I, D, S):
+                raise ValueError(f"free: expected shape {(I, D)} or {(I, D, S)}, got {free.shape}")
             if base is None:
                 raise ValueError("free needs base, the roster the other cells are fixed to")
             base = np.asarray(base)
             if base.shape != (I, D):
                 raise ValueError(f"base: expected shape {(I, D)}, got {base.shape}")
             outside = ~free
-            outside[:, : ctx.d_xi] = False
+            outside[:, : ctx.d_xi, :] = False
             fixed |= outside
-            target[outside] = base[outside]
-        for i, d in zip(*np.nonzero(fixed)):
-            for s in range(S):
-                m.Add(self.x[i, d, s] == int(target[i, d] == s))
-        self.fixed = fixed
+            target = np.where(outside, roster_to_binary(base, S), target)
+        for i, d, s in zip(*np.nonzero(fixed)):
+            m.Add(self.x[i, d, s] == int(target[i, d, s]))
+        self.fixed_vars = fixed                      # (n, m, k)
+        self.fixed = fixed.all(axis=2)               # (n, m): cells with every variable fixed
+        self.n_free = int((~fixed).sum())            # |V_w| when built for the repair
 
         self.terms: dict = {"requests": [], "cover": [], "stability": []}
         self.term_constants: dict = {"requests": 0.0, "cover": 0.0, "stability": 0.0}
