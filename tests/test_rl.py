@@ -172,8 +172,11 @@ def test_train_script_end_to_end(tmp_path):
     out = run("scripts/train.py", "--timesteps", "256", *common)
     assert out.returncode == 0, out.stdout + out.stderr
     run_dir, res_dir = tmp_path / "runs" / "t", tmp_path / "results" / "t"
-    for f in ("config.json", "pools.json", "latest.zip", "progress.csv"):
+    for f in ("config.json", "pools.json", "latest.zip", "progress.csv", "progress_instances.csv"):
         assert (run_dir / f).exists(), f
+    inst_rows = (run_dir / "progress_instances.csv").read_text().splitlines()
+    assert inst_rows[0].startswith("steps,instance,J_cp")
+    assert len(inst_rows) - 1 == 2 * (len((run_dir / "progress.csv").read_text().splitlines()) - 1)
     pools = json.loads((run_dir / "pools.json").read_text())
     assert len(pools["train"]) == 2 and len(pools["eval"]) == 2
     assert all(r["J_cp"] is not None for r in pools["eval"])
@@ -189,3 +192,7 @@ def test_train_script_end_to_end(tmp_path):
     assert out.returncode == 0, out.stdout + out.stderr
     for stem in ("learning_curve", "feasibility_curve", "final_gap"):
         assert (res_dir / "figures" / f"{stem}.pdf").stat().st_size > 1000
+    assert (res_dir / "progress_instances.csv").exists()
+    out = run("scripts/plot_results.py", "grid", str(res_dir), "--out", str(tmp_path / "grid"))
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert (tmp_path / "grid.pdf").stat().st_size > 1000

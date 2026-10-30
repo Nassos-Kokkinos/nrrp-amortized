@@ -3,6 +3,7 @@
 
   python scripts/plot_results.py cp results/cp_baseline/<run>
   python scripts/plot_results.py train results/train/<run>
+  python scripts/plot_results.py grid results/train/<run1> results/train/<run2> ... --out results/train/grid
 
 cp: from <run>/results.csv (scripts/solve_cp.py), two bar charts in <run>/figures/:
   gap_to_best_known.pdf   (J_CP - best known) / best known per instance; "opt" marks
@@ -17,6 +18,11 @@ train: from <run>/progress.csv and <run>/results.csv (scripts/train.py), in <run
   final_gap.pdf           J_policy - J_CP per held-out instance at the end (absolute: the
                           optimum can be near 0, where a relative gap means nothing)
 
+grid: from <run>/progress_instances.csv of several runs, one figure (full page width):
+  one panel per held-out instance, J against training steps, one thin line per run
+  (seed), one colour per configuration (--label of train.py), CP-SAT dashed; cf. Fig. 6
+  of Schulman et al. (2017)
+
 If an instance appears more than once in results.csv, its last row is used.
 Single-column width (3.4 in), 8 pt sans text, one colour per series; titles
 belong in the LaTeX caption, not in the figure.
@@ -29,6 +35,8 @@ import re
 from pathlib import Path
 
 import matplotlib
+import matplotlib.lines
+import matplotlib.ticker
 import numpy as np
 
 matplotlib.use("Agg")
@@ -235,6 +243,74 @@ def plot_train(run: Path) -> list[Path]:
     return written
 
 
+LABEL_COLORS = [SERIES, SERIES_2, "#1baf7a"]      # categorical slots 1-3 (validated all-pairs)
+
+
+def plot_grid(runs: list[Path], out: Path, cols: int = 4, metric: str = "det") -> list[Path]:
+    """Per-instance learning curves of several training runs, one panel per held-out instance,
+    one thin line per run (seed), colour per configuration label, CP-SAT dashed (cf. Fig. 6 of
+    Schulman et al., 2017). ``metric``: "det" (deterministic policy) or "best" (best of k)."""
+    import json
+    style()
+    key = {"det": "J_det", "best": "J_best_of_k"}[metric]
+    curves = {}            # instance -> list of (label, steps, values)
+    cp_ref, labels = {}, []
+    for run in runs:
+        prog = run / "progress_instances.csv"
+        if not prog.exists():
+            raise SystemExit(f"{prog} not found (runs before 30/10/2026 did not record it)")
+        info = json.loads((run / "run.json").read_text()) if (run / "run.json").exists() else {}
+        label = info.get("args", {}).get("label", "PPO + mask")
+        if label not in labels:
+            labels.append(label)
+        with prog.open(newline="") as fh:
+            rows = list(csv.DictReader(fh))
+        by_inst = {}
+        for r in rows:
+            by_inst.setdefault(r["instance"], []).append((float(r["steps"]), float(r[key])))
+            cp_ref[r["instance"]] = float(r["J_cp"])
+        for inst, pts in by_inst.items():
+            pts.sort()
+            curves.setdefault(inst, []).append((label, [p[0] for p in pts], [p[1] for p in pts]))
+    if len(labels) > len(LABEL_COLORS):
+        raise SystemExit(f"{len(labels)} configurations; at most {len(LABEL_COLORS)} stay distinguishable")
+    color = dict(zip(labels, LABEL_COLORS))
+    insts = sorted(curves, key=lambda s: [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", s)])
+    rows_n = -(-len(insts) // cols)
+    fig, axes = plt.subplots(rows_n, cols, figsize=(7.0, 1.25 * rows_n + 0.35), squeeze=False)
+    kfmt = FuncFormatter(lambda v, _: (f"{v / 1e6:g}M" if v >= 1e6 else f"{v / 1000:g}k") if v else "0")
+    for j, ax in enumerate(axes.flat):
+        if j >= len(insts):
+            ax.axis("off")
+            continue
+        inst = insts[j]
+        for label, xs, ys in curves[inst]:
+            ax.plot(xs, ys, color=color[label], linewidth=0.8, alpha=0.9)
+        ax.axhline(cp_ref[inst], color=MUTED, linewidth=0.7, linestyle=(0, (3, 2)))
+        # synthetic held-out instances are numbered as in final_gap.pdf; named instances keep their name
+        name = f"held-out {j + 1}" if inst.startswith("eval") else inst
+        ax.set_title(name, fontsize=6.5, color=INK_2, pad=2)
+        ax.tick_params(labelsize=5.5, length=2, pad=1)
+        ax.xaxis.set_major_formatter(kfmt)
+        ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(3))
+        ax.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(4))
+        if j // cols == rows_n - 1 or j + cols >= len(insts):
+            ax.set_xlabel("Training steps", fontsize=6)
+        if j % cols == 0:
+            ax.set_ylabel("J", fontsize=6)
+    handles = [matplotlib.lines.Line2D([], [], color=color[l], linewidth=1.2, label=l) for l in labels]
+    handles.append(matplotlib.lines.Line2D([], [], color=MUTED, linewidth=0.9, linestyle=(0, (3, 2)),
+                                           label="CP-SAT"))
+    empty = [ax for ax in axes.flat[len(insts):]]
+    if empty:
+        empty[-1].legend(handles=handles, frameon=False, fontsize=6.5, loc="center")
+    else:
+        fig.legend(handles=handles, frameon=False, fontsize=6.5, loc="lower center", ncol=len(handles),
+                   bbox_to_anchor=(0.5, 1.0))
+    fig.tight_layout(pad=0.4, h_pad=0.6, w_pad=0.5)
+    return save(fig, out.parent, out.stem)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="what", required=True)
@@ -242,12 +318,21 @@ def main():
     cp.add_argument("run", type=Path, help="results/cp_baseline/<run>")
     tr = sub.add_parser("train", help="training run: learning curve, feasibility, final gaps")
     tr.add_argument("run", type=Path, help="results/train/<run>")
+    gr = sub.add_parser("grid", help="per-instance learning curves of several runs (seeds, configurations)")
+    gr.add_argument("runs", type=Path, nargs="+", help="results/train/<run> ...")
+    gr.add_argument("--out", type=Path, required=True, help="output path without extension, e.g. results/train/grid_5x7")
+    gr.add_argument("--cols", type=int, default=4)
+    gr.add_argument("--metric", choices=["det", "best"], default="det",
+                    help="deterministic policy (default) or best of k stochastic rollouts")
     args = ap.parse_args()
     if args.what == "cp":
         for p in plot_cp(args.run):
             print(p)
     elif args.what == "train":
         for p in plot_train(args.run):
+            print(p)
+    elif args.what == "grid":
+        for p in plot_grid(args.runs, args.out, cols=args.cols, metric=args.metric):
             print(p)
 
 

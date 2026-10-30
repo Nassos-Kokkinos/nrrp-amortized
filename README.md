@@ -45,6 +45,7 @@ Python 3.14 for the venv. Tests of a missing extra are skipped.
 | `python scripts/plot_results.py cp results/cp_baseline/NAME` | bar charts (PDF for LaTeX, PNG preview) of a CP-SAT run |
 | `python scripts/train.py --name NAME --size 5 7 3 --timesteps 200000` | MaskablePPO on a pool of feasible synthetic instances; Ctrl+C saves, `--resume` continues; held-out evaluation against CP-SAT |
 | `python scripts/plot_results.py train results/train/NAME` | learning curve, feasibility curve, final gaps of a training run |
+| `python scripts/plot_results.py grid results/train/NAME-s0 results/train/NAME-s1 ... --out results/train/grid` | per-instance learning curves of several runs: one panel per held-out instance, one line per seed, one colour per `--label` (cf. Fig. 6 of the PPO paper) |
 | `tensorboard --logdir runs` | training curves while a run is going |
 
 Instance and solution files are not in the repository; see [data/README.md](data/README.md).

@@ -18,11 +18,19 @@ runs/<name>/ (git-ignored)
   pools.json           seeds of the training and held-out pools, CP-SAT reference per held-out instance
   latest.zip           the model, saved every --save-every steps and on Ctrl+C / kill -INT
   progress.csv         one row per evaluation: steps, wall time, J (deterministic and stochastic), feasibility, gap to CP-SAT
+  progress_instances.csv  the same per held-out instance (for the per-instance grid of learning curves)
   tb/                  TensorBoard logs (tensorboard --logdir runs)
 results/train/<name>/ (committed unless the name starts with provisional-)
   results.csv          final evaluation, one row per held-out instance
   run.json             machine, versions, parameters
   figures/             learning curve and final gaps (scripts/plot_results.py train)
+
+Several runs of one configuration with different --seed values, and runs of
+other configurations with another --label, give the grid of per-instance
+learning curves (scripts/plot_results.py grid), one panel per held-out
+instance and one thin line per seed, as in Fig. 6 of Schulman et al. (2017).
+The held-out pool depends only on --size and --eval-seed0, so it is the same
+across seeds and labels.
 
 Training reward: the training profile (H^ter penalised, weights --w-min-minutes
 and --w-min-consecutive, hyperparameters reported in Section 5), scaled by
@@ -49,6 +57,7 @@ from nrrp.gym_env import GymRosterEnv
 from nrrp.instance import Context
 from nrrp.profile import BURKE_CURTOIS, burke_curtois_training
 
+INSTANCE_FIELDS = ["steps", "instance", "J_cp", "J_det", "J_best_of_k", "feasible_det", "feasible_best_of_k"]
 EVAL_FIELDS = ["steps", "wall_seconds", "J_det", "J_stoch", "J_cp", "gap_det", "gap_stoch",
                "feasible_det", "feasible_stoch", "episodes_per_second"]
 RESULT_FIELDS = ["instance", "J_cp", "cp_status", "J_det", "feasible_det", "gap_det", "J_best_of_k",
@@ -149,7 +158,8 @@ def main():
     ap.add_argument("--n-epochs", type=int, default=10)
     ap.add_argument("--ent-coef", type=float, default=0.01)
     ap.add_argument("--hidden", type=int, nargs="+", default=[64, 64])
-    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--seed", type=int, default=0, help="seed of PPO and of the stochastic evaluation")
+    ap.add_argument("--label", default="PPO + mask", help="configuration label, groups seeds in the grid plot")
     ap.add_argument("--cp-time-limit", type=float, default=10.0, help="CP-SAT seconds per pool instance")
     ap.add_argument("--resume", action="store_true", help="continue runs/<name>/latest.zip")
     ap.add_argument("--evaluate-only", action="store_true", help="evaluate runs/<name>/latest.zip and plot")
@@ -216,9 +226,18 @@ def main():
 
     progress = run / "progress.csv"
 
+    progress_inst = run / "progress_instances.csv"
+
     def log_eval(steps, wall):
         rows = evaluate(model, eval_env, pools["eval"], k_samples=args.k_samples, seed=args.seed)
         s = summary(rows)
+        new = not progress_inst.exists()
+        with progress_inst.open("a", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=INSTANCE_FIELDS)
+            if new:
+                w.writeheader()
+            for r in rows:
+                w.writerow({"steps": steps, **{key: r[key] for key in INSTANCE_FIELDS[1:]}})
         new = not progress.exists()
         with progress.open("a", newline="") as fh:
             w = csv.DictWriter(fh, fieldnames=EVAL_FIELDS)
@@ -288,8 +307,9 @@ def main():
         w = csv.DictWriter(fh, fieldnames=RESULT_FIELDS)
         w.writeheader()
         w.writerows(rows)
-    if progress.exists():
-        (out / "progress.csv").write_text(progress.read_text())
+    for f in (progress, progress_inst):
+        if f.exists():
+            (out / f.name).write_text(f.read_text())
     (out / "run.json").write_text(json.dumps({**config, "steps": model.num_timesteps,
                                               "finished": time.strftime("%Y-%m-%d %H:%M:%S %z"),
                                               "summary": summary(rows)}, indent=2) + "\n")
