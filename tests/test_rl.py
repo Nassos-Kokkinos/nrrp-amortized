@@ -199,7 +199,8 @@ def test_train_script_end_to_end(tmp_path):
 
     # policy alone against policy with repair, on the toy run (both forms of Algorithm 1)
     import csv
-    for extra, folder in (([], "t-anytime"), (["--first-feasible"], "t-first")):
+    for extra, folder in (([], "t-anytime"), (["--first-feasible"], "t-first"),
+                          (["--source", "random"], "t-random-anytime")):
         out = run("scripts/eval_repair.py", "--name", "t", "--runs", str(tmp_path / "runs"),
                   "--results", str(tmp_path / "repair"), "--budgets", "0", "2", "--workers", "1", *extra)
         assert out.returncode == 0, out.stdout + out.stderr

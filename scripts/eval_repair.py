@@ -13,7 +13,13 @@ runs on it once per budget tau_cp in --budgets. tau_cp = 0 is the policy alone
 evaluated under the published profile (BURKE_CURTOIS), against the CP-SAT
 reference stored in pools.json.
 
-results/repair/<name>[-best]-anytime/   or   <name>[-best]-first/  with --first-feasible (committed unless the name starts with provisional-)
+--source random replaces the policy by a uniformly random masked construction
+(same environment, same instances): the ablation that measures what the trained
+policy contributes beyond the repair operator. A good policy leaves few H^ter
+violations, hence a small V^ter and a small neighbourhood |V_w|; the summary
+reports both.
+
+results/repair/<name>[-best|-random]-anytime/   or   ...-first/  with --first-feasible (committed unless the name starts with provisional-)
   results.csv   one row per (instance, tau_cp): J, feasibility, violations, window reached,
                 |V_w| per subproblem, employees in V^ter, T_policy, T_repair, J and time of CP-SAT
   run.json      machine, versions, parameters, and the summary per tau_cp
@@ -46,8 +52,9 @@ def main():
     ap.add_argument("--first-feasible", action="store_true",
                     help="stop at the first feasible window (the 25/10 PDF's form) instead of the anytime "
                          "form (default; see nrrp/repair.py)")
-    ap.add_argument("--source", choices=["det", "best"], default="det",
-                    help="repair the deterministic rollout, or the best of --k-samples stochastic ones")
+    ap.add_argument("--source", choices=["det", "best", "random"], default="det",
+                    help="repair the deterministic rollout, the best of --k-samples stochastic ones, or a "
+                         "uniformly random masked construction (ablation)")
     ap.add_argument("--k-samples", type=int, default=8)
     ap.add_argument("--workers", type=int, default=8, help="CP-SAT workers in the repair")
     ap.add_argument("--seed", type=int, default=0)
@@ -80,15 +87,19 @@ def main():
     model = MaskablePPO.load(run / "latest.zip", env=env, device="cpu")
     rng = np.random.default_rng(args.seed)
 
-    def rollout(idx, deterministic):
+    def rollout(idx, deterministic, random_policy=False):
         obs, _ = env.reset(seed=int(rng.integers(2**31 - 1)), options={"instance": idx})
         done, info = False, {}
         while not done:
-            a, _ = model.predict(obs, action_masks=env.action_masks(), deterministic=deterministic)
+            mask = env.action_masks()
+            if random_policy:
+                a = int(rng.choice(np.flatnonzero(mask)))
+            else:
+                a, _ = model.predict(obs, action_masks=mask, deterministic=deterministic)
             obs, _, done, _, info = env.step(int(a))
         return env.roster, info["evaluation"]
 
-    out = args.results / (args.out_name or (args.name + ("-best" if args.source == "best" else "")
+    out = args.results / (args.out_name or (args.name + {"det": "", "best": "-best", "random": "-random"}[args.source]
                                             + ("-first" if args.first_feasible else "-anytime")))
     out.mkdir(parents=True, exist_ok=True)
     budgets = sorted(set(args.budgets))
@@ -100,6 +111,8 @@ def main():
         t0 = time.perf_counter()
         if args.source == "det":
             x, ev = rollout(idx, True)
+        elif args.source == "random":
+            x, ev = rollout(idx, False, random_policy=True)
         else:
             cands = [rollout(idx, False) for _ in range(args.k_samples)]
             x, ev = min(cands, key=lambda c: (not c[1]["feasible"], c[1]["J"]))
@@ -135,7 +148,8 @@ def main():
 
     summary = {}
     print(f"\n{'tau_cp':>8s} {'mean J':>8s} {'feasible':>9s} {'mean J - J_cp':>14s} {'mean T_repair':>14s} "
-          f"{'max T_repair':>13s}   (CP-SAT mean J {np.mean([r['J_cp'] for r in pools['eval']]):.1f})")
+          f"{'max T_repair':>13s} {'V^ter emp.':>11s} {'|V_w0|/vars':>12s}   "
+          f"(CP-SAT mean J {np.mean([r['J_cp'] for r in pools['eval']]):.1f})")
     for tau in budgets:
         sel = [r for r in rows if r["tau_cp"] == tau]
         s = {"mean_J": float(np.mean([r["J"] for r in sel])),
@@ -143,9 +157,15 @@ def main():
              "mean_gap_to_cp": float(np.mean([r["gap_to_cp"] for r in sel])),
              "mean_repair_seconds": float(np.mean([r["repair_seconds"] for r in sel])),
              "max_repair_seconds": float(np.max([r["repair_seconds"] for r in sel]))}
+        reps = [r for r in sel if r["n_free"] not in ("", "[]")]
+        s["mean_ter_employees"] = float(np.mean([r["n_ter_employees"] for r in reps])) if reps else None
+        s["mean_first_free_share"] = (float(np.mean([json.loads(r["n_free"])[0] / r["n_vars"] for r in reps]))
+                                      if reps else None)
         summary[str(tau)] = s
+        ter = "-" if s["mean_ter_employees"] is None else f"{s['mean_ter_employees']:.1f}"
+        share = "-" if s["mean_first_free_share"] is None else f"{s['mean_first_free_share']:.0%}"
         print(f"{tau:8g} {s['mean_J']:8.1f} {s['feasible']:9.0%} {s['mean_gap_to_cp']:14.1f} "
-              f"{s['mean_repair_seconds']:13.3f}s {s['max_repair_seconds']:12.3f}s")
+              f"{s['mean_repair_seconds']:13.3f}s {s['max_repair_seconds']:12.3f}s {ter:>11s} {share:>12s}")
     (out / "run.json").write_text(json.dumps({
         "training_run": args.name, "steps": model.num_timesteps, "args": {k_: str(v) if isinstance(v, Path) else v
                                                                         for k_, v in vars(args).items()},
