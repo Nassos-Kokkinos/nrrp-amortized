@@ -82,7 +82,7 @@ def main():
     train_profile = burke_curtois_training(w_min_minutes=targs["w_min_minutes"],
                                            w_min_consecutive=targs["w_min_consecutive"])
     env = GymRosterEnv(insts, train_profile, eval_profile=BURKE_CURTOIS, kappa=kappa,
-                       reward_scale=targs.get("reward_scale", 0.01))
+                       reward_scale=targs.get("reward_scale", 0.01), features=targs.get("features", "table2"))
     torch.set_num_threads(1)               # inference latency of one rollout, one thread
     model = MaskablePPO.load(run / "latest.zip", env=env, device="cpu")
     rng = np.random.default_rng(args.seed)

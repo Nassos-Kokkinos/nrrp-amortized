@@ -35,8 +35,9 @@ def rollout(env, rng, seed=None, options=None):
     return total, info
 
 
-def test_gymnasium_checker():
-    check_env(GymRosterEnv(pool(), TRAIN, eval_profile=BURKE_CURTOIS), skip_render_check=True)
+@pytest.mark.parametrize("features", ["table2", "extended"])
+def test_gymnasium_checker(features):
+    check_env(GymRosterEnv(pool(), TRAIN, eval_profile=BURKE_CURTOIS, features=features), skip_render_check=True)
 
 
 @pytest.mark.parametrize("scale", [1.0, 0.01])
@@ -92,10 +93,10 @@ def make_policy(env, **kw):
                           n_emp=env.n_emp, n_shifts=env.n_shifts, **kw)
 
 
-@pytest.mark.parametrize("separate", [False, True])
-def test_policy_is_equivariant_in_the_employees(separate):
-    env = GymRosterEnv(pool(n=6, k=3), TRAIN)
-    pol = make_policy(env, separate_critic=separate)
+@pytest.mark.parametrize("separate, features", [(False, "table2"), (True, "table2"), (True, "extended")])
+def test_policy_is_equivariant_in_the_employees(separate, features):
+    env = GymRosterEnv(pool(n=6, k=3), TRAIN, features=features)
+    pol = make_policy(env, separate_critic=separate, features=features)
     torch.manual_seed(0)
     for p in pol.parameters():                      # random weights, not the near-uniform init
         torch.nn.init.normal_(p, std=0.5)
@@ -185,6 +186,9 @@ def test_policy_refuses_a_wrong_observation_size():
     env = GymRosterEnv(pool(n=5), TRAIN)
     with pytest.raises(ValueError, match="expected"):
         EmployeePolicy(env.observation_space, env.action_space, lambda _: 3e-4, n_emp=6, n_shifts=3)
+    with pytest.raises(ValueError, match="extended features"):
+        EmployeePolicy(env.observation_space, env.action_space, lambda _: 3e-4, n_emp=5, n_shifts=3,
+                       features="extended")
 
 
 def test_maskable_ppo_runs():
@@ -260,6 +264,19 @@ def test_train_script_end_to_end(tmp_path):
     assert cfg["gamma"] == 0.99 and cfg["args"]["separate_critic"] and cfg["args"]["init_from"] == "t"
     out = run("scripts/train.py", "--name", "t2", "--timesteps", "256", "--resume", *common[2:])
     assert out.returncode == 0, out.stdout + out.stderr
+
+    # extended state encoding: train, resume (the encoding is read back from config.json), repair
+    out = run("scripts/train.py", "--name", "t3", "--timesteps", "128", "--pools-from", "t", "--features", "extended",
+              *common[2:])
+    assert out.returncode == 0, out.stdout + out.stderr
+    out = run("scripts/train.py", "--name", "t3", "--timesteps", "256", "--resume", *common[2:])
+    assert out.returncode == 0, out.stdout + out.stderr
+    out = run("scripts/eval_repair.py", "--name", "t3", "--runs", str(tmp_path / "runs"),
+              "--results", str(tmp_path / "repair"), "--budgets", "0", "1", "--workers", "1")
+    assert out.returncode == 0, out.stdout + out.stderr
+    out = run("scripts/train.py", "--name", "t5", "--timesteps", "128", "--pools-from", "t", "--features", "extended",
+              "--init-from", "t", *common[2:])
+    assert out.returncode != 0 and "cannot transfer" in out.stdout + out.stderr
 
     # policy alone against policy with repair, on the toy run (both forms of Algorithm 1)
     import csv

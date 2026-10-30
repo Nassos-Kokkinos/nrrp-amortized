@@ -93,22 +93,23 @@ class EmployeePolicy(MaskableActorCriticPolicy):
     """MaskablePPO policy with the architecture of Eq. (39).
 
     policy_kwargs: ``n_emp``, ``n_shifts`` (to split the observation), and
-    optionally ``hidden`` (encoder sizes), ``value_hidden`` and ``separate_critic``.
+    optionally ``hidden`` (encoder sizes), ``value_hidden``, ``separate_critic`` and
+    ``features`` (the state encoding of the environment, "table2" or "extended").
     """
 
     def __init__(self, observation_space, action_space, lr_schedule, *, n_emp: int, n_shifts: int,
                  hidden=(64, 64), value_hidden=(64,), separate_critic: bool = False,
-                 activation_fn=nn.Tanh, **kwargs):
+                 features: str = "table2", activation_fn=nn.Tanh, **kwargs):
         self._n_emp, self._n_shifts = int(n_emp), int(n_shifts)
         self._hidden, self._value_hidden = tuple(hidden), tuple(value_hidden)
         self._separate_critic = bool(separate_critic)
+        self._features = features
         from .env import RosterEnv
-        self._d_psi = RosterEnv.PREV + self._n_shifts
-        self._d_g = RosterEnv.G_SHIFT + self._n_shifts
+        self._d_psi, self._d_g = RosterEnv.dims(self._n_shifts, features)
         want = self._n_emp * self._d_psi + self._d_g
         if observation_space.shape != (want,):
             raise ValueError(f"observation of shape {observation_space.shape}, expected ({want},) "
-                             f"for {n_emp} employees and {n_shifts} shift types")
+                             f"for {n_emp} employees and {n_shifts} shift types ({features} features)")
         if action_space.n != self._n_emp + 1:
             raise ValueError(f"{action_space.n} actions, expected {self._n_emp + 1}")
         super().__init__(observation_space, action_space, lr_schedule, activation_fn=activation_fn,
@@ -132,7 +133,8 @@ class EmployeePolicy(MaskableActorCriticPolicy):
     def _get_constructor_parameters(self):
         data = super()._get_constructor_parameters()
         data.update(n_emp=self._n_emp, n_shifts=self._n_shifts, hidden=self._hidden,
-                    value_hidden=self._value_hidden, separate_critic=self._separate_critic)
+                    value_hidden=self._value_hidden, separate_critic=self._separate_critic,
+                    features=self._features)
         return data
 
 

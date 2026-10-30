@@ -72,13 +72,43 @@ class RosterEnv:
         "G_SHIFT": "one-hot of s (width k)",
     }
 
+    # features="extended" (30/10/2026) appends, after PREV, per employee:
+    RUN_DEFICIT, URGENCY, COST = range(3)          # offsets from PREV + k
+    N_EXT_E = 3
+    # and, after G_SHIFT, globally:
+    G_SHIFT_LEN, G_TIGHTNESS = range(2)            # offsets from G_SHIFT + k
+    N_EXT_G = 2
+    SHIFT_LEN_SCALE = 720.0                        # minutes
+    COST_SCALE = 100.0
+    EXTENDED = {
+        "RUN_DEFICIT": "max(C^min_i - r, 0) / C^min_i for a work run of r days ending at d-1 that started "
+                       "after day 0 (left there, it violates (9)); 0 otherwise",
+        "URGENCY": "max(H^min - minutes before d, 0) / (l_s (m - d)), clipped to 1",
+        "COST": "immediate cost of assigning i to the slot, (lin + penalty increments) / 100, clipped to "
+                "[-1, 1]; 0 for employees outside the mask",
+        "G_SHIFT_LEN": "l_s / 720, clipped to 1",
+        "G_TIGHTNESS": "sum_i max(H^min_i - minutes_i, 0) / (2 x minutes of the slots still to decide), "
+                       "clipped to 1",
+    }
+    FEATURE_SETS = ("table2", "extended")
+
+    @classmethod
+    def dims(cls, n_shifts: int, features: str = "table2") -> tuple:
+        """(d_psi, d_g): widths of an employee row and of the global vector."""
+        if features not in cls.FEATURE_SETS:
+            raise ValueError(f"features must be one of {cls.FEATURE_SETS}, not {features!r}")
+        ext = features == "extended"
+        return (cls.PREV + n_shifts + (cls.N_EXT_E if ext else 0),
+                cls.G_SHIFT + n_shifts + (cls.N_EXT_G if ext else 0))
+
     def __init__(self, instance: Instance, profile, contexts=None, kappa: int = 1,
                  include_constants: bool = False, seed=None, check_history: bool = True,
-                 eval_profile=None):
+                 eval_profile=None, features: str = "table2"):
         """``contexts``: None (construction every episode), a fixed Context, or a
         callable rng -> Context drawing one per episode (the P of Eq. (23)).
         ``profile`` defines the reward and the mask; ``eval_profile``, if given,
-        is used only to evaluate the final roster."""
+        is used only to evaluate the final roster. ``features``: "table2" (the
+        encoding of Table 2) or "extended" (Table 2 plus ``EXTENDED``)."""
         if kappa < 0:
             raise ValueError("kappa must be >= 0")
         inst = instance
@@ -113,7 +143,11 @@ class RosterEnv:
         self.inv_wk = 1.0 / np.maximum(inst.max_weekends, 1)
         self.inv_rho = 1.0 / np.maximum(inst.rho, 1)
 
-        FE, FG = self.PREV + S, self.G_SHIFT + S
+        FE, FG = self.dims(S, features)
+        self.features, self.ext = features, features == "extended"
+        self.EX, self.GX = self.PREV + S, self.G_SHIFT + S
+        self.inv_cmin = 1.0 / np.maximum(inst.min_consec, 1)
+        self.shift_len_f = np.minimum(inst.shift_len / self.SHIFT_LEN_SCALE, 1.0)
         self.obs = np.zeros(I * FE + FG, np.float32)
         self.E = self.obs[: I * FE].reshape(I, FE)   # views into obs
         self.G = self.obs[I * FE:]
@@ -132,6 +166,8 @@ class RosterEnv:
         self.pair_s = ss
         self.pair_rb = rho_bar[self.pair_d, self.pair_s]
         self.T = int(self.pair_rb.sum())
+        slot_min = self.pair_rb * inst.shift_len[self.pair_s]
+        self.cap_after = np.concatenate([np.cumsum(slot_min[::-1])[::-1][1:], [0]]).astype(float)
         if self.T == 0:
             raise ValueError(f"context {ctx.name} has no slots (rho = 0 everywhere and kappa = 0)")
         self.fill_inc = [fill_increments(ctx, self.profile, d, s, rb)
@@ -180,6 +216,8 @@ class RosterEnv:
             E[a, self.ALLOWED] = 0.0
             E[a, self.COUNT_S] = min(self.count[a, s] * self.inv_nmax[a, s], 1.0)
             E[a, self.WEEKENDS] = min(self.weekends[a] * self.inv_wk[a], 1.0)
+            if self.ext:
+                E[a, self.EX + self.COST] = 0.0
         self.t += 1
         self.k += 1
         self.J_acc += cost
@@ -275,8 +313,13 @@ class RosterEnv:
             E[:, self.SLACK] = np.clip((inst.max_minutes - m) * self.inv_hmax, -1.0, 1.0)
             E[:, self.RUN_WORK] = np.minimum(self.run_work * self.inv_cmax, 1.0)
             E[:, self.REST] = np.minimum(self.run_off * self.inv_rmin, 1.0)
-            E[:, self.PREV:] = self.eye_ext[self.prev]
+            E[:, self.PREV:self.PREV + self.S] = self.eye_ext[self.prev]
             G[self.G_DAY] = (d + 1) / self.D
+            if self.ext:
+                r = self.run_work
+                E[:, self.EX + self.RUN_DEFICIT] = np.where(
+                    (r > 0) & (r < d), np.maximum(inst.min_consec - r, 0), 0) * self.inv_cmin
+                self._short_day = np.maximum(inst.min_minutes - m, 0)
         mask = ~self.assigned
         for c in self.pre:
             mask &= c.delta(self, d, s) == 0
@@ -290,8 +333,14 @@ class RosterEnv:
         E[:, self.X0] = self.x0_f[:, d, s]
         E[:, self.COUNT_S] = np.minimum(self.count[:, s] * self.inv_nmax[:, s], 1.0)
         E[:, self.ALLOWED] = mask
-        G[self.G_SHIFT:] = 0.0
+        G[self.G_SHIFT:self.G_SHIFT + self.S] = 0.0
         G[self.G_SHIFT + s] = 1.0
+        if self.ext:
+            L = float(inst.shift_len[s])
+            E[:, self.EX + self.URGENCY] = np.minimum(self._short_day / (L * (self.D - d)), 1.0)
+            E[:, self.EX + self.COST] = np.where(
+                mask, np.clip((self.lin[:, d, s] + pen) / self.COST_SCALE, -1.0, 1.0), 0.0)
+            G[self.GX + self.G_SHIFT_LEN] = self.shift_len_f[s]
         self.p, self.cd, self.cs, self.k, self.f = p, d, s, 0, 0
         self.rb = int(self.pair_rb[p])
         self.inc = self.fill_inc[p]
@@ -305,3 +354,7 @@ class RosterEnv:
         G[self.G_SLOTS_LEFT] = (self.rb - self.k) / self.rb
         G[self.G_ADMISSIBLE] = self.n_allowed / (self.I + 1)
         G[self.G_OVERCOVER] = float(self.f >= self.rho_ds)
+        if self.ext:
+            short = float(np.maximum(self.inst.min_minutes - self.minutes, 0).sum())
+            cap = (self.rb - self.k) * float(self.inst.shift_len[self.cs]) + self.cap_after[self.p]
+            G[self.GX + self.G_TIGHTNESS] = min(short / (2.0 * max(cap, 1.0)), 1.0)

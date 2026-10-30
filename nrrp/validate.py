@@ -139,6 +139,31 @@ def features_from_scratch(env: RosterEnv) -> np.ndarray:
     G[env.G_ADMISSIBLE] = mask.sum() / (I + 1)
     G[env.G_OVERCOVER] = float(f >= inst.rho[d, s])
     G[env.G_SHIFT + s] = 1.0
+    if getattr(env, "ext", False):
+        from .objective import linear_costs
+        X, GX = env.EX, env.GX
+        r = st.run_work
+        E[:, X + env.RUN_DEFICIT] = np.where((r > 0) & (r < d), np.maximum(inst.min_consec - r, 0), 0) / \
+            np.maximum(inst.min_consec, 1)
+        L = float(inst.shift_len[s])
+        E[:, X + env.URGENCY] = np.minimum(np.maximum(inst.min_minutes - mins, 0) / (L * (D - d)), 1.0)
+        lin = linear_costs(ctx)
+        for i in np.flatnonzero(mask[:I]):          # immediate cost: penalised violation before / after
+            row = roster[i].copy()
+            before_ = sum(w * c.violation_row(i, row, ctx) for c, w in env.row_penalties)
+            row[d] = s
+            after_ = sum(w * c.violation_row(i, row, ctx) for c, w in env.row_penalties)
+            E[i, X + env.COST] = np.clip((lin[i, d, s] + after_ - before_) / env.COST_SCALE, -1.0, 1.0)
+        G[GX + env.G_SHIFT_LEN] = min(L / env.SHIFT_LEN_SCALE, 1.0)
+        all_rows = roster != OFF
+        now = np.where(all_rows, inst.shift_len[np.where(all_rows, roster, 0)], 0).sum(axis=1)
+        short = np.maximum(inst.min_minutes - now, 0).sum()
+        cap = (rho_bar[d, s] - k) * L
+        for dd in range(d, D):
+            for ss in range(inst.n_shifts):
+                if (dd, ss) > (d, s) and rho_bar[dd, ss] > 0:
+                    cap += rho_bar[dd, ss] * inst.shift_len[ss]
+        G[GX + env.G_TIGHTNESS] = min(short / (2.0 * max(cap, 1.0)), 1.0)
     return np.concatenate([E.ravel(), G])
 
 
@@ -180,7 +205,8 @@ def run_episode(env: RosterEnv, rng: np.random.Generator, report: Report) -> Non
 
 
 def smoke(instance, profile, *, regime: str = "construction", episodes: int = 10, kappa: int = 1,
-          mu: float = 1.0, per_step: bool = True, seed: int = 0, label: str | None = None) -> Report:
+          mu: float = 1.0, per_step: bool = True, seed: int = 0, label: str | None = None,
+          features: str = "table2") -> Report:
     """Random masked rollouts; include_constants alternates between episodes."""
     if regime == "construction":
         contexts = None
@@ -189,7 +215,7 @@ def smoke(instance, profile, *, regime: str = "construction", episodes: int = 10
             return random_context(instance, profile, rng, mu=mu, kappa=kappa)
     else:
         raise ValueError("regime must be 'construction' or 'rerostering'")
-    env = RosterEnv(instance, profile, contexts=contexts, kappa=kappa, seed=seed)
+    env = RosterEnv(instance, profile, contexts=contexts, kappa=kappa, seed=seed, features=features)
     rng = np.random.default_rng(seed + 1)
     report = Report(label or f"{instance.name} / {profile.name} / {regime}", per_step)
     for ep in range(episodes):

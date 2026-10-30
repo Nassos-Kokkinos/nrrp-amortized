@@ -33,9 +33,10 @@ class GymRosterEnv(gym.Env):
     def __init__(self, instances: Sequence[Instance], profile, *,
                  contexts: Callable[[np.random.Generator, Instance], Context] | None = None,
                  kappa: int = 1, eval_profile=None, reward_scale: float = 1.0,
-                 include_constants: bool = False):
+                 include_constants: bool = False, features: str = "table2"):
         """``contexts``: None for construction (d_xi = 0, no disruption), or a
-        callable (rng, instance) -> Context drawing a re-rostering context."""
+        callable (rng, instance) -> Context drawing a re-rostering context.
+        ``features``: the state encoding, "table2" or "extended" (RosterEnv)."""
         super().__init__()
         instances = list(instances)
         if not instances:
@@ -50,6 +51,7 @@ class GymRosterEnv(gym.Env):
         self.kappa, self.reward_scale = int(kappa), float(reward_scale)
         self.include_constants = bool(include_constants)
         self.contexts = contexts
+        self.features = features
         self.n_emp, self.n_shifts = n, k
         self._envs: dict = {}
         self.env: RosterEnv | None = None
@@ -68,7 +70,7 @@ class GymRosterEnv(gym.Env):
                 ctx = (lambda rng, inst=inst: draw(rng, inst))
             self._envs[idx] = RosterEnv(inst, self.profile, contexts=ctx, kappa=self.kappa,
                                         include_constants=self.include_constants,
-                                        eval_profile=self.eval_profile)
+                                        eval_profile=self.eval_profile, features=self.features)
         return self._envs[idx]
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):

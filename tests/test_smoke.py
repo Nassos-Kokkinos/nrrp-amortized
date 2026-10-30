@@ -24,6 +24,37 @@ def test_smoke(size, extras, regime, profile):
     assert r.ok, Report.HEADER + "\n" + r.line()
 
 
+@pytest.mark.parametrize("regime", ["construction", "rerostering"])
+@pytest.mark.parametrize("profile", ["bc_training", "burke_curtois"])
+def test_smoke_extended_features(regime, profile):
+    """The extended encoding: every feature checked against its from-scratch value."""
+    from nrrp.profile import burke_curtois_training
+    prof = burke_curtois_training(w_min_minutes=0.2, w_min_consecutive=100.0) if profile == "bc_training" \
+        else BURKE_CURTOIS
+    inst = synthetic_instance(6, 14, 3, seed=3)
+    r = smoke(inst, prof, regime=regime, episodes=4, features="extended")
+    assert r.ok, Report.HEADER + "\n" + r.line()
+
+
+def test_extended_features_by_hand():
+    from nrrp.profile import burke_curtois_training
+    inst = synthetic_instance(4, 7, 2, seed=0)
+    inst.min_consec[:] = 3
+    env = RosterEnv(inst, burke_curtois_training(w_min_minutes=0.2, w_min_consecutive=100.0),
+                    features="extended", kappa=0)
+    assert env.obs_dim == 4 * (RosterEnv.PREV + 2 + 3) + RosterEnv.G_SHIFT + 2 + 2
+    env.reset()
+    X, GX = env.EX, env.GX
+    assert (env.E[:, X + env.RUN_DEFICIT] == 0).all()               # day 0: no run yet
+    L = inst.shift_len[env.cs]
+    np.testing.assert_allclose(env.E[:, X + env.URGENCY], np.minimum(inst.min_minutes / (L * 7), 1), rtol=1e-6)
+    assert env.G[GX + env.G_SHIFT_LEN] == pytest.approx(min(L / 720, 1))
+    total = (np.minimum(inst.rho, 4) * inst.shift_len[None, :]).sum()
+    assert env.G[GX + env.G_TIGHTNESS] == pytest.approx(min(inst.min_minutes.sum() / (2 * total), 1), rel=1e-6)
+    # the mask zeroes COST outside M(s_t)
+    assert (env.E[~env.action_mask()[:-1], X + env.COST] == 0).all()
+
+
 def test_smoke_with_kappa_zero_and_two(inst):
     for kappa in (0, 2):
         r = smoke(inst, BURKE_CURTOIS, episodes=3, kappa=kappa)
@@ -74,6 +105,28 @@ class StaleCountFeature(RosterEnv):
         if not self.done and self.k > 0:       # still inside the same pair
             self.E[:, self.COUNT_S] = keep
         return out
+
+
+class StaleRunDeficit(RosterEnv):
+    """The run-deficit feature of the extended encoding is computed one day late."""
+
+    def _enter_pair(self, p):
+        new_day = int(self.pair_d[p]) != self._feat_day
+        keep = self.E[:, self.EX + self.RUN_DEFICIT].copy()
+        super()._enter_pair(p)
+        if new_day and self.cd > 0:
+            self.E[:, self.EX + self.RUN_DEFICIT] = keep
+
+
+def test_validator_catches_a_stale_extended_feature():
+    inst = synthetic_instance(8, 21, 3, seed=5)
+    inst.min_consec[:] = 3
+    env = StaleRunDeficit(inst, BURKE_CURTOIS, seed=0, features="extended")
+    report = Report("StaleRunDeficit", per_step=True)
+    rng = np.random.default_rng(0)
+    for _ in range(4):
+        run_episode(env, rng, report)
+    assert report.feature_error > 0 and not report.ok, report.line()
 
 
 @pytest.mark.parametrize("mutant, regime", [

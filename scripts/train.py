@@ -46,7 +46,10 @@ evaluation is still J), --lr-schedule linear, --target-kl, --vf-coef,
 starts from a policy trained on another size (curriculum 5x7 -> 25x7: the
 network has no parameter that depends on the number of employees).
 --pools-from RUN reuses another run's pools so that runs compare on the same
-instances.
+instances. --features extended adds to Table 2 the quantities the H^ter
+constraints depend on (RosterEnv.EXTENDED): the deficit of a work run below
+C^min_i, the urgency of the minutes shortfall, the immediate cost of each
+assignment, the shift length and the global tightness.
 
   python scripts/train.py --name 25x7-ent001-init5x7 --size 25 7 3 --pools-from mac-25x7-2M \
       --init-from mac-5x7-1M --ent-coef 0.001 --timesteps 2000000 --eval-every 100000 --save-every 100000
@@ -180,6 +183,8 @@ def main():
     ap.add_argument("--target-kl", type=float, default=None, help="stop an update's epochs early past this KL")
     ap.add_argument("--vf-coef", type=float, default=0.5)
     ap.add_argument("--clip-range", type=float, default=0.2)
+    ap.add_argument("--features", choices=["table2", "extended"], default="table2",
+                    help="state encoding: Table 2, or Table 2 plus the H^ter features of RosterEnv.EXTENDED")
     ap.add_argument("--separate-critic", action="store_true",
                     help="give the critic its own encoder instead of sharing the actor's")
     ap.add_argument("--pools-from", metavar="RUN",
@@ -235,10 +240,13 @@ def main():
 
     train_profile = burke_curtois_training(w_min_minutes=args.w_min_minutes,
                                            w_min_consecutive=args.w_min_consecutive)
+    if args.resume or args.evaluate_only:      # the encoding the model was trained with
+        prev = json.loads((run / "config.json").read_text())["args"] if (run / "config.json").exists() else {}
+        args.features = prev.get("features", "table2")
     env = GymRosterEnv(train_insts, train_profile, eval_profile=BURKE_CURTOIS,
-                       kappa=args.kappa, reward_scale=args.reward_scale)
+                       kappa=args.kappa, reward_scale=args.reward_scale, features=args.features)
     eval_env = GymRosterEnv(eval_insts, train_profile, eval_profile=BURKE_CURTOIS,
-                            kappa=args.kappa, reward_scale=args.reward_scale)
+                            kappa=args.kappa, reward_scale=args.reward_scale, features=args.features)
 
     config = {"args": {k_: (str(v) if isinstance(v, Path) else v) for k_, v in vars(args).items()},
               "machine": versions(), "train_profile": train_profile.describe(),
@@ -260,7 +268,7 @@ def main():
             n_epochs=args.n_epochs, gamma=args.gamma, gae_lambda=args.gae_lambda, clip_range=args.clip_range,
             ent_coef=args.ent_coef, vf_coef=args.vf_coef, target_kl=args.target_kl,
             policy_kwargs=dict(n_emp=n, n_shifts=k, hidden=tuple(args.hidden), value_hidden=(args.hidden[-1],),
-                               separate_critic=args.separate_critic),
+                               separate_critic=args.separate_critic, features=args.features),
             tensorboard_log=str(run / "tb"), seed=args.seed, verbose=0, device="cpu")
         if args.init_from:
             from stable_baselines3.common.save_util import load_from_zip_file
