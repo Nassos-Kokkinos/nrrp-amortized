@@ -1,0 +1,17 @@
+instance,J_cp,cp_status,J_det,feasible_det,gap_det,J_best_of_k,feasible_best_of_k,gap_best_of_k,k,violations_det,policy_ms_per_roster
+eval5x7x3s100000,4.0,OPTIMAL,112.0,False,27.0,9.0,True,1.25,8,"{""min_total_minutes"": 303.0}",3.72
+eval5x7x3s100001,109.0,OPTIMAL,311.0,True,1.853211009174312,411.0,True,2.770642201834862,8,{},4.02
+eval5x7x3s100002,107.0,OPTIMAL,213.0,False,0.9906542056074766,315.0,True,1.9439252336448598,8,"{""min_total_minutes"": 250.0, ""min_consecutive_shifts"": 1.0}",3.5
+eval5x7x3s100003,103.0,OPTIMAL,406.0,False,2.941747572815534,306.0,False,1.970873786407767,8,"{""min_total_minutes"": 1041.0}",3.75
+eval5x7x3s100004,101.0,OPTIMAL,305.0,False,2.01980198019802,313.0,True,2.099009900990099,8,"{""min_total_minutes"": 160.0, ""min_consecutive_shifts"": 1.0}",3.69
+eval5x7x3s100005,7.0,OPTIMAL,12.0,False,0.7142857142857143,16.0,True,1.2857142857142858,8,"{""min_total_minutes"": 350.0, ""min_consecutive_shifts"": 2.0}",3.42
+eval5x7x3s100006,6.0,OPTIMAL,314.0,False,51.333333333333336,116.0,True,18.333333333333332,8,"{""min_total_minutes"": 109.0}",3.68
+eval5x7x3s100008,4.0,OPTIMAL,211.0,True,51.75,115.0,True,27.75,8,{},3.86
+eval5x7x3s100010,7.0,OPTIMAL,13.0,True,0.8571428571428571,20.0,True,1.8571428571428572,8,{},3.13
+eval5x7x3s100011,7.0,OPTIMAL,415.0,True,58.285714285714285,311.0,True,43.42857142857143,8,{},3.79
+eval5x7x3s100012,205.0,OPTIMAL,413.0,False,1.0146341463414634,409.0,True,0.9951219512195122,8,"{""min_total_minutes"": 106.0}",3.92
+eval5x7x3s100013,9.0,OPTIMAL,116.0,False,11.88888888888889,10.0,False,0.1111111111111111,8,"{""min_total_minutes"": 310.0, ""min_consecutive_shifts"": 2.0}",3.53
+eval5x7x3s100014,3.0,OPTIMAL,204.0,False,67.0,11.0,True,2.6666666666666665,8,"{""min_total_minutes"": 866.0}",3.5
+eval5x7x3s100015,5.0,OPTIMAL,212.0,False,41.4,115.0,True,22.0,8,"{""min_total_minutes"": 246.0, ""min_consecutive_shifts"": 1.0}",3.86
+eval5x7x3s100016,11.0,OPTIMAL,417.0,False,36.90909090909091,213.0,True,18.363636363636363,8,"{""min_total_minutes"": 138.0}",3.99
+eval5x7x3s100018,5.0,OPTIMAL,14.0,False,1.8,23.0,True,3.6,8,"{""min_total_minutes"": 201.0, ""min_consecutive_shifts"": 1.0}",3.46

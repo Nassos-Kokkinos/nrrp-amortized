@@ -1,0 +1,17 @@
+instance,J_cp,cp_status,J_det,feasible_det,gap_det,J_best_of_k,feasible_best_of_k,gap_best_of_k,k,violations_det,policy_ms_per_roster
+eval5x7x3s100000,4.0,OPTIMAL,110.0,True,26.5,10.0,True,1.5,8,{},3.6
+eval5x7x3s100001,109.0,OPTIMAL,617.0,False,4.660550458715596,409.0,True,2.7522935779816513,8,"{""min_total_minutes"": 269.0, ""min_consecutive_shifts"": 1.0}",3.9
+eval5x7x3s100002,107.0,OPTIMAL,114.0,False,0.06542056074766354,214.0,True,1.0,8,"{""min_total_minutes"": 573.0, ""min_consecutive_shifts"": 1.0}",3.43
+eval5x7x3s100003,103.0,OPTIMAL,509.0,False,3.941747572815534,303.0,False,1.941747572815534,8,"{""min_total_minutes"": 1041.0}",3.66
+eval5x7x3s100004,101.0,OPTIMAL,210.0,False,1.0792079207920793,205.0,False,1.0297029702970297,8,"{""min_total_minutes"": 288.0}",3.56
+eval5x7x3s100005,7.0,OPTIMAL,117.0,False,15.714285714285714,13.0,False,0.8571428571428571,8,"{""min_total_minutes"": 230.0, ""min_consecutive_shifts"": 1.0}",3.32
+eval5x7x3s100006,6.0,OPTIMAL,214.0,True,34.666666666666664,321.0,True,52.5,8,{},3.66
+eval5x7x3s100008,4.0,OPTIMAL,216.0,True,53.0,115.0,True,27.75,8,{},3.83
+eval5x7x3s100010,7.0,OPTIMAL,23.0,False,2.2857142857142856,17.0,True,1.4285714285714286,8,"{""min_total_minutes"": 104.0}",3.04
+eval5x7x3s100011,7.0,OPTIMAL,216.0,False,29.857142857142858,311.0,True,43.42857142857143,8,"{""min_consecutive_shifts"": 1.0}",3.8
+eval5x7x3s100012,205.0,OPTIMAL,309.0,True,0.5073170731707317,409.0,True,0.9951219512195122,8,{},3.82
+eval5x7x3s100013,9.0,OPTIMAL,113.0,False,11.555555555555555,216.0,False,23.0,8,"{""min_consecutive_shifts"": 1.0}",3.51
+eval5x7x3s100014,3.0,OPTIMAL,6.0,False,1.0,12.0,True,3.0,8,"{""min_total_minutes"": 459.0, ""min_consecutive_shifts"": 1.0}",3.48
+eval5x7x3s100015,5.0,OPTIMAL,217.0,False,42.4,212.0,True,41.4,8,"{""min_total_minutes"": 246.0}",3.82
+eval5x7x3s100016,11.0,OPTIMAL,519.0,False,46.18181818181818,418.0,True,37.0,8,"{""min_total_minutes"": 618.0}",3.87
+eval5x7x3s100018,5.0,OPTIMAL,222.0,False,43.4,121.0,True,23.2,8,"{""min_total_minutes"": 418.0}",3.42

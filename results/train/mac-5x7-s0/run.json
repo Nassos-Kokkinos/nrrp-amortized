@@ -1,0 +1,65 @@
+{
+  "args": {
+    "name": "mac-5x7-s0",
+    "size": [
+      5,
+      7,
+      3
+    ],
+    "train_pool": 64,
+    "eval_pool": 16,
+    "train_seed0": 0,
+    "eval_seed0": 100000,
+    "timesteps": 1000000,
+    "eval_every": 50000,
+    "save_every": 20000,
+    "k_samples": 8,
+    "kappa": 1,
+    "reward_scale": 0.01,
+    "w_min_minutes": 0.2,
+    "w_min_consecutive": 100.0,
+    "lr": 0.0003,
+    "n_steps": 2048,
+    "batch_size": 256,
+    "n_epochs": 10,
+    "ent_coef": 0.01,
+    "hidden": [
+      64,
+      64
+    ],
+    "seed": 0,
+    "label": "PPO + mask",
+    "cp_time_limit": 10.0,
+    "resume": false,
+    "evaluate_only": false,
+    "runs": "runs",
+    "results": "results/train"
+  },
+  "machine": {
+    "platform": "macOS-26.3-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "cpu_count": 10,
+    "python": "3.14.10",
+    "numpy": "2.5.4",
+    "torch": "2.15.0",
+    "gymnasium": "1.4.0",
+    "stable_baselines3": "2.9.2",
+    "sb3_contrib": "2.9.2",
+    "ortools": "9.15.6755"
+  },
+  "train_profile": "profile burke_curtois_training\n  H^pre (hard, prefix-monotone, masked): shift_rotation, max_shifts_per_type, max_total_minutes, max_consecutive_shifts, min_consecutive_days_off, max_weekends, days_off, unavailability, skills\n  H^ter (hard, not prefix-monotone, repaired): -\n  penalised: min_total_minutes (w=0.2 per minutes), min_consecutive_shifts (w=100 per days short)\n  off: min_coverage",
+  "eval_profile": "burke_curtois",
+  "gamma": 1.0,
+  "started": "2026-10-30 15:29:05 +0200",
+  "steps": 1001472,
+  "finished": "2026-10-30 15:32:05 +0200",
+  "summary": {
+    "J_det": 236.6875,
+    "J_stoch": 142.5625,
+    "J_cp": 43.3125,
+    "gap_det": 21.376075011131228,
+    "gap_stoch": 7.977698610959922,
+    "feasible_det": 0.25,
+    "feasible_stoch": 0.875
+  }
+}
