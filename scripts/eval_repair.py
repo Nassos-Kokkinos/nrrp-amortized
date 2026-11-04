@@ -25,6 +25,12 @@ with kappa = 1, Eq. (40) as written also frees every pair whose optional
 (rho + 1)-th slot was left empty, about half of all pairs on 25x7, whatever the
 policy (measured 02/11/2026), so the neighbourhood is ~85% of the problem.
 
+Fair baseline (Section 5, Eq. (42)): for every tau_cp > 0, CP-SAT from scratch
+on the full problem with the same wall-clock budget and the same workers;
+per instance, win / tie / loss of policy + repair against it (a CP-SAT run
+with no feasible roster is a loss for CP-SAT if ours is feasible).
+--no-cp-scratch skips it.
+
 results/repair/<name>[-best|-random]-anytime[-ek0]/   or   ...-first/  with --first-feasible (committed unless the name starts with provisional-)
   results.csv   one row per (instance, tau_cp): J, feasibility, violations, window reached,
                 |V_w| per subproblem, employees in V^ter, T_policy, T_repair, J and time of CP-SAT
@@ -46,7 +52,8 @@ import numpy as np
 FIELDS = ["instance", "tau_cp", "w0", "anytime", "source", "empty_kappa", "J_cp", "cp_status", "cp_seconds",
           "J_policy", "feasible_policy", "policy_ms", "J", "feasible", "gap_to_cp", "violations",
           "window", "windows", "statuses", "n_free", "n_vars", "n_ter_employees", "n_empty_pairs",
-          "changed_cells", "repair_seconds", "infer_seconds"]
+          "changed_cells", "repair_seconds", "infer_seconds",
+          "J_cp_scratch", "feasible_cp_scratch", "cp_scratch_status", "cp_scratch_seconds", "vs_cp_scratch"]
 
 
 def main():
@@ -64,6 +71,8 @@ def main():
     ap.add_argument("--empty-kappa", type=int, default=None,
                     help="kappa used for V^∅ (slots left unfilled): pairs below min(rho + this, n). Default: the "
                          "training kappa, as Eq. (40) is written; 0 = only pairs below rho (genuine under-coverage)")
+    ap.add_argument("--no-cp-scratch", action="store_true",
+                    help="skip the fair baseline: CP-SAT from scratch with the same budget tau and workers")
     ap.add_argument("--k-samples", type=int, default=8)
     ap.add_argument("--workers", type=int, default=8, help="CP-SAT workers in the repair")
     ap.add_argument("--seed", type=int, default=0)
@@ -76,6 +85,7 @@ def main():
     from sb3_contrib import MaskablePPO
 
     from nrrp.gym_env import GymRosterEnv
+    from nrrp.cpsat import solve
     from nrrp.instance import Context
     from nrrp.profile import BURKE_CURTOIS, burke_curtois_training
     from nrrp.repair import repair
@@ -141,16 +151,34 @@ def main():
                 J, feas, viol = ev["J"], ev["feasible"], ev["violations"]
                 extra = {"window": "", "windows": "[]", "statuses": "[]", "n_free": "[]", "n_ter_employees": "",
                          "n_empty_pairs": "", "changed_cells": 0, "repair_seconds": 0.0}
-            rows.append({"instance": inst.name, "tau_cp": tau, "w0": args.w0, "anytime": not args.first_feasible,
+            scratch = {"J_cp_scratch": "", "feasible_cp_scratch": "", "cp_scratch_status": "",
+                       "cp_scratch_seconds": "", "vs_cp_scratch": ""}
+            if tau > 0 and not args.no_cp_scratch:
+                t1 = time.perf_counter()
+                cs = solve(ctx, BURKE_CURTOIS, time_limit=tau, workers=args.workers, seed=args.seed)
+                cs_ok = bool(cs.has_solution and cs.feasible)
+                scratch = {"J_cp_scratch": cs.J if cs_ok else "", "feasible_cp_scratch": cs_ok,
+                           "cp_scratch_status": cs.status, "cp_scratch_seconds": round(time.perf_counter() - t1, 4)}
+                if feas and (not cs_ok or J < cs.J - 1e-9):
+                    scratch["vs_cp_scratch"] = "win"
+                elif cs_ok and (not feas or J > cs.J + 1e-9):
+                    scratch["vs_cp_scratch"] = "loss"
+                else:
+                    scratch["vs_cp_scratch"] = "tie"
+            rows.append({**scratch, "instance": inst.name, "tau_cp": tau, "w0": args.w0, "anytime": not args.first_feasible,
                          "source": args.source, "empty_kappa": empty_kappa,
                          "J_cp": rec["J_cp"], "cp_status": rec["cp_status"], "cp_seconds": rec["cp_seconds"],
                          "J_policy": ev["J"], "feasible_policy": ev["feasible"],
                          "policy_ms": round(1000 * t_pol, 2), "J": J, "feasible": feas,
                          "gap_to_cp": J - rec["J_cp"], "violations": json.dumps(viol),
                          "n_vars": n * m * k, "infer_seconds": round(t_pol + extra["repair_seconds"], 4), **extra})
+        def cell(r):
+            out = f"   tau={r['tau_cp']:g}: {r['J']:6.0f}{'' if r['feasible'] else '*'}"
+            if r["cp_scratch_status"]:
+                out += " | cp " + (f"{r['J_cp_scratch']:.0f}" if r["feasible_cp_scratch"] else "-")
+            return out
         print(f"  {inst.name:22s} CP-SAT {rec['J_cp']:6.0f}   policy {ev['J']:6.0f} ({'feasible' if ev['feasible'] else 'infeasible'})"
-              + "".join(f"   tau={r['tau_cp']:g}: {r['J']:6.0f}{'' if r['feasible'] else '*'}"
-                        for r in rows if r["instance"] == inst.name and r["tau_cp"] > 0), flush=True)
+              + "".join(cell(r) for r in rows if r["instance"] == inst.name and r["tau_cp"] > 0), flush=True)
 
     with (out / "results.csv").open("w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=FIELDS)
@@ -172,11 +200,28 @@ def main():
         s["mean_ter_employees"] = float(np.mean([r["n_ter_employees"] for r in reps])) if reps else None
         s["mean_first_free_share"] = (float(np.mean([json.loads(r["n_free"])[0] / r["n_vars"] for r in reps]))
                                       if reps else None)
+        cps = [r for r in sel if r["cp_scratch_status"]]
+        if cps:
+            solved = [r for r in cps if r["feasible_cp_scratch"]]
+            s["cp_scratch_feasible"] = len(solved) / len(cps)
+            s["cp_scratch_mean_J_solved"] = float(np.mean([r["J_cp_scratch"] for r in solved])) if solved else None
+            s["ours_mean_J_same_instances"] = float(np.mean([r["J"] for r in solved])) if solved else None
+            s["wins"], s["ties"], s["losses"] = (sum(r["vs_cp_scratch"] == x for r in cps) for x in ("win", "tie", "loss"))
         summary[str(tau)] = s
         ter = "-" if s["mean_ter_employees"] is None else f"{s['mean_ter_employees']:.1f}"
         share = "-" if s["mean_first_free_share"] is None else f"{s['mean_first_free_share']:.0%}"
         print(f"{tau:8g} {s['mean_J']:8.1f} {s['feasible']:9.0%} {s['mean_gap_to_cp']:14.1f} "
               f"{s['mean_repair_seconds']:13.3f}s {s['max_repair_seconds']:12.3f}s {ter:>11s} {share:>12s}")
+    if any(r["cp_scratch_status"] for r in rows):
+        print(f"\nfair baseline, CP-SAT from scratch with the same tau and {args.workers} workers:")
+        print(f"{'tau_cp':>8s} {'CP feasible':>12s} {'CP mean J':>10s} {'ours, same inst.':>17s} {'win/tie/loss':>13s}   (CP mean J over the instances it solved)")
+        for tau in budgets:
+            s = summary[str(tau)]
+            if "wins" not in s:
+                continue
+            cj = "-" if s["cp_scratch_mean_J_solved"] is None else f"{s['cp_scratch_mean_J_solved']:.1f}"
+            oj = "-" if s["ours_mean_J_same_instances"] is None else f"{s['ours_mean_J_same_instances']:.1f}"
+            print(f"{tau:8g} {s['cp_scratch_feasible']:12.0%} {cj:>10s} {oj:>17s} {s['wins']:>5d}/{s['ties']}/{s['losses']}")
     (out / "run.json").write_text(json.dumps({
         "training_run": args.name, "steps": model.num_timesteps, "args": {k_: str(v) if isinstance(v, Path) else v
                                                                         for k_, v in vars(args).items()},

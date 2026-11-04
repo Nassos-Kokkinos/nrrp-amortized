@@ -293,3 +293,6 @@ def test_train_script_end_to_end(tmp_path):
         assert all(r["feasible"] == "True" for r in repaired)          # pool instances are CP-feasible
         assert all(float(r["J"]) >= float(r["J_cp"]) - 1e-6 for r in repaired)
         assert (tmp_path / "repair" / folder / "run.json").exists()
+        assert all(r["vs_cp_scratch"] in ("win", "tie", "loss") for r in repaired)
+        assert all(r["vs_cp_scratch"] == "" and r["cp_scratch_status"] == "" for r in alone)
+        assert "fair baseline" in out.stdout
