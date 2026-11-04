@@ -5,6 +5,7 @@
     "name": "25x7-F-ext-sep",
     "budgets": [
       0.0,
+      0.01,
       0.02,
       0.05,
       0.1,
@@ -14,6 +15,8 @@
     "w0": 1,
     "first_feasible": false,
     "source": "det",
+    "empty_kappa": null,
+    "no_cp_scratch": false,
     "k_samples": 8,
     "workers": 8,
     "seed": 0,
@@ -33,7 +36,7 @@
     "sb3_contrib": "2.9.2",
     "ortools": "9.15.6755"
   },
-  "finished": "2026-11-02 12:25:22 +0200",
+  "finished": "2026-11-05 00:21:28 +0200",
   "summary": {
     "0.0": {
       "mean_J": 219.5,
@@ -44,50 +47,95 @@
       "mean_ter_employees": null,
       "mean_first_free_share": null
     },
-    "0.02": {
-      "mean_J": 27.3125,
-      "feasible": 0.9375,
-      "mean_gap_to_cp": 13.125,
-      "mean_repair_seconds": 0.02475625,
-      "max_repair_seconds": 0.031,
+    "0.01": {
+      "mean_J": 282.4375,
+      "feasible": 0.3125,
+      "mean_gap_to_cp": 268.25,
+      "mean_repair_seconds": 0.0186875,
+      "max_repair_seconds": 0.0235,
       "mean_ter_employees": 4.25,
-      "mean_first_free_share": 0.8266666666666667
+      "mean_first_free_share": 0.8266666666666667,
+      "cp_scratch_feasible": 0.0,
+      "cp_scratch_mean_J_solved": null,
+      "ours_mean_J_same_instances": null,
+      "wins": 5,
+      "ties": 11,
+      "losses": 0
+    },
+    "0.02": {
+      "mean_J": 26.75,
+      "feasible": 1.0,
+      "mean_gap_to_cp": 12.5625,
+      "mean_repair_seconds": 0.025031249999999998,
+      "max_repair_seconds": 0.0294,
+      "mean_ter_employees": 4.25,
+      "mean_first_free_share": 0.8266666666666667,
+      "cp_scratch_feasible": 1.0,
+      "cp_scratch_mean_J_solved": 17.375,
+      "ours_mean_J_same_instances": 26.75,
+      "wins": 1,
+      "ties": 1,
+      "losses": 14
     },
     "0.05": {
-      "mean_J": 22.6875,
+      "mean_J": 22.25,
       "feasible": 1.0,
-      "mean_gap_to_cp": 8.5,
-      "mean_repair_seconds": 0.058187499999999996,
-      "max_repair_seconds": 0.0692,
+      "mean_gap_to_cp": 8.0625,
+      "mean_repair_seconds": 0.05734375,
+      "max_repair_seconds": 0.0613,
       "mean_ter_employees": 4.25,
-      "mean_first_free_share": 0.8266666666666667
+      "mean_first_free_share": 0.8266666666666667,
+      "cp_scratch_feasible": 1.0,
+      "cp_scratch_mean_J_solved": 14.875,
+      "ours_mean_J_same_instances": 22.25,
+      "wins": 0,
+      "ties": 1,
+      "losses": 15
     },
     "0.1": {
-      "mean_J": 16.625,
+      "mean_J": 16.9375,
       "feasible": 1.0,
-      "mean_gap_to_cp": 2.4375,
-      "mean_repair_seconds": 0.102175,
-      "max_repair_seconds": 0.1095,
+      "mean_gap_to_cp": 2.75,
+      "mean_repair_seconds": 0.10059375000000001,
+      "max_repair_seconds": 0.1101,
       "mean_ter_employees": 4.25,
-      "mean_first_free_share": 0.8266666666666667
+      "mean_first_free_share": 0.8266666666666667,
+      "cp_scratch_feasible": 1.0,
+      "cp_scratch_mean_J_solved": 14.5,
+      "ours_mean_J_same_instances": 16.9375,
+      "wins": 0,
+      "ties": 10,
+      "losses": 6
     },
     "0.5": {
-      "mean_J": 14.1875,
+      "mean_J": 14.375,
       "feasible": 1.0,
-      "mean_gap_to_cp": 0.0,
-      "mean_repair_seconds": 0.18976875,
-      "max_repair_seconds": 0.4764,
+      "mean_gap_to_cp": 0.1875,
+      "mean_repair_seconds": 0.1872375,
+      "max_repair_seconds": 0.5099,
       "mean_ter_employees": 4.25,
-      "mean_first_free_share": 0.8266666666666667
+      "mean_first_free_share": 0.8266666666666667,
+      "cp_scratch_feasible": 1.0,
+      "cp_scratch_mean_J_solved": 14.1875,
+      "ours_mean_J_same_instances": 14.375,
+      "wins": 0,
+      "ties": 15,
+      "losses": 1
     },
     "2.0": {
       "mean_J": 14.1875,
       "feasible": 1.0,
       "mean_gap_to_cp": 0.0,
-      "mean_repair_seconds": 0.1822875,
-      "max_repair_seconds": 0.5828,
+      "mean_repair_seconds": 0.19646249999999998,
+      "max_repair_seconds": 0.554,
       "mean_ter_employees": 4.25,
-      "mean_first_free_share": 0.8266666666666667
+      "mean_first_free_share": 0.8266666666666667,
+      "cp_scratch_feasible": 1.0,
+      "cp_scratch_mean_J_solved": 14.1875,
+      "ours_mean_J_same_instances": 14.1875,
+      "wins": 0,
+      "ties": 16,
+      "losses": 0
     }
   }
 }

@@ -5,14 +5,18 @@
     "name": "mac-5x7-1M",
     "budgets": [
       0.0,
+      0.01,
       0.02,
       0.05,
-      0.2,
-      1.0
+      0.1,
+      0.5,
+      2.0
     ],
     "w0": 1,
     "first_feasible": false,
     "source": "random",
+    "empty_kappa": null,
+    "no_cp_scratch": false,
     "k_samples": 8,
     "workers": 8,
     "seed": 0,
@@ -32,7 +36,7 @@
     "sb3_contrib": "2.9.2",
     "ortools": "9.15.6755"
   },
-  "finished": "2026-10-30 16:22:07 +0200",
+  "finished": "2026-11-05 00:21:56 +0200",
   "summary": {
     "0.0": {
       "mean_J": 515.0625,
@@ -43,41 +47,95 @@
       "mean_ter_employees": null,
       "mean_first_free_share": null
     },
-    "0.02": {
-      "mean_J": 94.5,
+    "0.01": {
+      "mean_J": 139.75,
       "feasible": 1.0,
-      "mean_gap_to_cp": 51.1875,
-      "mean_repair_seconds": 0.02151875,
-      "max_repair_seconds": 0.0234,
+      "mean_gap_to_cp": 96.4375,
+      "mean_repair_seconds": 0.01275625,
+      "max_repair_seconds": 0.0144,
       "mean_ter_employees": 1.9375,
-      "mean_first_free_share": 0.9029761904761904
+      "mean_first_free_share": 0.9029761904761904,
+      "cp_scratch_feasible": 1.0,
+      "cp_scratch_mean_J_solved": 49.5625,
+      "ours_mean_J_same_instances": 139.75,
+      "wins": 0,
+      "ties": 2,
+      "losses": 14
+    },
+    "0.02": {
+      "mean_J": 94.5625,
+      "feasible": 1.0,
+      "mean_gap_to_cp": 51.25,
+      "mean_repair_seconds": 0.021775,
+      "max_repair_seconds": 0.0237,
+      "mean_ter_employees": 1.9375,
+      "mean_first_free_share": 0.9029761904761904,
+      "cp_scratch_feasible": 1.0,
+      "cp_scratch_mean_J_solved": 43.3125,
+      "ours_mean_J_same_instances": 94.5625,
+      "wins": 0,
+      "ties": 6,
+      "losses": 10
     },
     "0.05": {
+      "mean_J": 62.3125,
+      "feasible": 1.0,
+      "mean_gap_to_cp": 19.0,
+      "mean_repair_seconds": 0.033049999999999996,
+      "max_repair_seconds": 0.0537,
+      "mean_ter_employees": 1.9375,
+      "mean_first_free_share": 0.9029761904761904,
+      "cp_scratch_feasible": 1.0,
+      "cp_scratch_mean_J_solved": 43.3125,
+      "ours_mean_J_same_instances": 62.3125,
+      "wins": 0,
+      "ties": 13,
+      "losses": 3
+    },
+    "0.1": {
       "mean_J": 49.5625,
       "feasible": 1.0,
       "mean_gap_to_cp": 6.25,
-      "mean_repair_seconds": 0.03275625,
-      "max_repair_seconds": 0.0538,
+      "mean_repair_seconds": 0.036612500000000006,
+      "max_repair_seconds": 0.1037,
       "mean_ter_employees": 1.9375,
-      "mean_first_free_share": 0.9029761904761904
+      "mean_first_free_share": 0.9029761904761904,
+      "cp_scratch_feasible": 1.0,
+      "cp_scratch_mean_J_solved": 43.3125,
+      "ours_mean_J_same_instances": 49.5625,
+      "wins": 0,
+      "ties": 15,
+      "losses": 1
     },
-    "0.2": {
+    "0.5": {
       "mean_J": 43.3125,
       "feasible": 1.0,
       "mean_gap_to_cp": 0.0,
-      "mean_repair_seconds": 0.042637499999999995,
-      "max_repair_seconds": 0.1953,
+      "mean_repair_seconds": 0.0436125,
+      "max_repair_seconds": 0.2016,
       "mean_ter_employees": 1.9375,
-      "mean_first_free_share": 0.9029761904761904
+      "mean_first_free_share": 0.9029761904761904,
+      "cp_scratch_feasible": 1.0,
+      "cp_scratch_mean_J_solved": 43.3125,
+      "ours_mean_J_same_instances": 43.3125,
+      "wins": 0,
+      "ties": 16,
+      "losses": 0
     },
-    "1.0": {
+    "2.0": {
       "mean_J": 43.3125,
       "feasible": 1.0,
       "mean_gap_to_cp": 0.0,
-      "mean_repair_seconds": 0.04165625,
-      "max_repair_seconds": 0.1848,
+      "mean_repair_seconds": 0.04484375,
+      "max_repair_seconds": 0.2219,
       "mean_ter_employees": 1.9375,
-      "mean_first_free_share": 0.9029761904761904
+      "mean_first_free_share": 0.9029761904761904,
+      "cp_scratch_feasible": 1.0,
+      "cp_scratch_mean_J_solved": 43.3125,
+      "ours_mean_J_same_instances": 43.3125,
+      "wins": 0,
+      "ties": 16,
+      "losses": 0
     }
   }
 }

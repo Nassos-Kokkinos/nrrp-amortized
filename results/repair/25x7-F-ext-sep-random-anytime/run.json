@@ -5,6 +5,7 @@
     "name": "25x7-F-ext-sep",
     "budgets": [
       0.0,
+      0.01,
       0.02,
       0.05,
       0.1,
@@ -14,6 +15,8 @@
     "w0": 1,
     "first_feasible": false,
     "source": "random",
+    "empty_kappa": null,
+    "no_cp_scratch": false,
     "k_samples": 8,
     "workers": 8,
     "seed": 0,
@@ -33,7 +36,7 @@
     "sb3_contrib": "2.9.2",
     "ortools": "9.15.6755"
   },
-  "finished": "2026-11-02 12:25:44 +0200",
+  "finished": "2026-11-05 00:21:45 +0200",
   "summary": {
     "0.0": {
       "mean_J": 636.3125,
@@ -44,50 +47,95 @@
       "mean_ter_employees": null,
       "mean_first_free_share": null
     },
-    "0.02": {
-      "mean_J": 26.1875,
-      "feasible": 1.0,
-      "mean_gap_to_cp": 12.0,
-      "mean_repair_seconds": 0.026418749999999998,
-      "max_repair_seconds": 0.0292,
+    "0.01": {
+      "mean_J": 610.3125,
+      "feasible": 0.0625,
+      "mean_gap_to_cp": 596.125,
+      "mean_repair_seconds": 0.0175,
+      "max_repair_seconds": 0.0199,
       "mean_ter_employees": 10.25,
-      "mean_first_free_share": 0.85
+      "mean_first_free_share": 0.85,
+      "cp_scratch_feasible": 0.0,
+      "cp_scratch_mean_J_solved": null,
+      "ours_mean_J_same_instances": null,
+      "wins": 1,
+      "ties": 15,
+      "losses": 0
+    },
+    "0.02": {
+      "mean_J": 27.3125,
+      "feasible": 1.0,
+      "mean_gap_to_cp": 13.125,
+      "mean_repair_seconds": 0.027699999999999995,
+      "max_repair_seconds": 0.0321,
+      "mean_ter_employees": 10.25,
+      "mean_first_free_share": 0.85,
+      "cp_scratch_feasible": 1.0,
+      "cp_scratch_mean_J_solved": 18.0625,
+      "ours_mean_J_same_instances": 27.3125,
+      "wins": 1,
+      "ties": 1,
+      "losses": 14
     },
     "0.05": {
       "mean_J": 20.9375,
       "feasible": 1.0,
       "mean_gap_to_cp": 6.75,
-      "mean_repair_seconds": 0.057031250000000006,
-      "max_repair_seconds": 0.0617,
+      "mean_repair_seconds": 0.056675,
+      "max_repair_seconds": 0.0622,
       "mean_ter_employees": 10.25,
-      "mean_first_free_share": 0.85
+      "mean_first_free_share": 0.85,
+      "cp_scratch_feasible": 1.0,
+      "cp_scratch_mean_J_solved": 15.0625,
+      "ours_mean_J_same_instances": 20.9375,
+      "wins": 0,
+      "ties": 0,
+      "losses": 16
     },
     "0.1": {
-      "mean_J": 17.0,
+      "mean_J": 17.25,
       "feasible": 1.0,
-      "mean_gap_to_cp": 2.8125,
-      "mean_repair_seconds": 0.104125,
-      "max_repair_seconds": 0.121,
+      "mean_gap_to_cp": 3.0625,
+      "mean_repair_seconds": 0.1043375,
+      "max_repair_seconds": 0.1131,
       "mean_ter_employees": 10.25,
-      "mean_first_free_share": 0.85
+      "mean_first_free_share": 0.85,
+      "cp_scratch_feasible": 1.0,
+      "cp_scratch_mean_J_solved": 14.6875,
+      "ours_mean_J_same_instances": 17.25,
+      "wins": 0,
+      "ties": 6,
+      "losses": 10
     },
     "0.5": {
-      "mean_J": 14.1875,
+      "mean_J": 14.3125,
       "feasible": 1.0,
-      "mean_gap_to_cp": 0.0,
-      "mean_repair_seconds": 0.1932625,
-      "max_repair_seconds": 0.4792,
+      "mean_gap_to_cp": 0.125,
+      "mean_repair_seconds": 0.21028750000000002,
+      "max_repair_seconds": 0.5098,
       "mean_ter_employees": 10.25,
-      "mean_first_free_share": 0.85
+      "mean_first_free_share": 0.85,
+      "cp_scratch_feasible": 1.0,
+      "cp_scratch_mean_J_solved": 14.1875,
+      "ours_mean_J_same_instances": 14.3125,
+      "wins": 0,
+      "ties": 15,
+      "losses": 1
     },
     "2.0": {
       "mean_J": 14.1875,
       "feasible": 1.0,
       "mean_gap_to_cp": 0.0,
-      "mean_repair_seconds": 0.19672499999999998,
-      "max_repair_seconds": 0.6198,
+      "mean_repair_seconds": 0.23605625,
+      "max_repair_seconds": 1.1093,
       "mean_ter_employees": 10.25,
-      "mean_first_free_share": 0.85
+      "mean_first_free_share": 0.85,
+      "cp_scratch_feasible": 1.0,
+      "cp_scratch_mean_J_solved": 14.1875,
+      "ours_mean_J_same_instances": 14.1875,
+      "wins": 0,
+      "ties": 16,
+      "losses": 0
     }
   }
 }
