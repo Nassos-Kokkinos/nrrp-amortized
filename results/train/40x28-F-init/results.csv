@@ -1,0 +1,17 @@
+instance,J_cp,cp_status,J_det,feasible_det,gap_det,J_best_of_k,feasible_best_of_k,gap_best_of_k,k,violations_det,policy_ms_per_roster
+eval40x28x3s100001,63.0,OPTIMAL,1766.0,False,27.03174603174603,976.0,False,14.492063492063492,8,"{""min_total_minutes"": 745.0, ""min_consecutive_shifts"": 18.0}",667.56
+eval40x28x3s100003,55.0,OPTIMAL,1792.0,False,31.581818181818182,1091.0,False,18.836363636363636,8,"{""min_total_minutes"": 1101.0, ""min_consecutive_shifts"": 19.0}",492.14
+eval40x28x3s100004,55.0,OPTIMAL,1286.0,False,22.381818181818183,1188.0,False,20.6,8,"{""min_total_minutes"": 1664.0, ""min_consecutive_shifts"": 11.0}",450.99
+eval40x28x3s100006,47.0,OPTIMAL,1461.0,False,30.085106382978722,1330.0,False,27.29787234042553,8,"{""min_total_minutes"": 86.0, ""min_consecutive_shifts"": 21.0}",620.68
+eval40x28x3s100007,48.0,OPTIMAL,1069.0,False,21.270833333333332,763.0,False,14.895833333333334,8,"{""min_total_minutes"": 1565.0, ""min_consecutive_shifts"": 20.0}",665.44
+eval40x28x3s100010,69.0,OPTIMAL,1990.0,False,27.840579710144926,1303.0,False,17.884057971014492,8,"{""min_total_minutes"": 66.0, ""min_consecutive_shifts"": 11.0}",515.71
+eval40x28x3s100011,61.0,OPTIMAL,1772.0,False,28.049180327868854,1056.0,False,16.311475409836067,8,"{""min_total_minutes"": 705.0, ""min_consecutive_shifts"": 11.0}",636.57
+eval40x28x3s100012,37.0,OPTIMAL,2043.0,False,54.21621621621622,2031.0,False,53.891891891891895,8,"{""min_total_minutes"": 402.0, ""min_consecutive_shifts"": 15.0}",520.64
+eval40x28x3s100013,43.0,OPTIMAL,1474.0,False,33.27906976744186,482.0,False,10.209302325581396,8,"{""min_total_minutes"": 2975.0, ""min_consecutive_shifts"": 16.0}",460.01
+eval40x28x3s100015,64.0,OPTIMAL,2280.0,False,34.625,1177.0,False,17.390625,8,"{""min_total_minutes"": 136.0, ""min_consecutive_shifts"": 26.0}",647.83
+eval40x28x3s100017,69.0,OPTIMAL,1064.0,False,14.420289855072463,1077.0,False,14.608695652173912,8,"{""min_total_minutes"": 670.0, ""min_consecutive_shifts"": 13.0}",652.07
+eval40x28x3s100018,62.0,OPTIMAL,1461.0,False,22.56451612903226,1153.0,False,17.596774193548388,8,"{""min_total_minutes"": 11.0, ""min_consecutive_shifts"": 17.0}",628.93
+eval40x28x3s100019,58.0,OPTIMAL,1670.0,False,27.79310344827586,1374.0,False,22.689655172413794,8,"{""min_total_minutes"": 247.0, ""min_consecutive_shifts"": 15.0}",423.37
+eval40x28x3s100021,67.0,OPTIMAL,1374.0,False,19.507462686567163,1385.0,False,19.671641791044777,8,"{""min_total_minutes"": 4613.0, ""min_consecutive_shifts"": 24.0}",433.06
+eval40x28x3s100023,72.0,OPTIMAL,1997.0,False,26.73611111111111,1297.0,False,17.01388888888889,8,"{""min_total_minutes"": 1754.0, ""min_consecutive_shifts"": 15.0}",500.08
+eval40x28x3s100024,63.0,OPTIMAL,1786.0,False,27.349206349206348,673.0,False,9.682539682539682,8,"{""min_total_minutes"": 599.0, ""min_consecutive_shifts"": 13.0}",442.43

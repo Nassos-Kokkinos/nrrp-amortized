@@ -296,3 +296,32 @@ def test_train_script_end_to_end(tmp_path):
         assert all(r["vs_cp_scratch"] in ("win", "tie", "loss") for r in repaired)
         assert all(r["vs_cp_scratch"] == "" and r["cp_scratch_status"] == "" for r in alone)
         assert "fair baseline" in out.stdout
+
+
+def test_ctrl_c_stops_pool_building(tmp_path):
+    """CP-SAT catches SIGINT itself, so the pool builder must notice the cut-short solve and stop."""
+    import signal
+    import subprocess
+    import sys
+    import time
+    from pathlib import Path
+    pytest.importorskip("ortools")
+    root = Path(__file__).resolve().parents[1]
+    proc = subprocess.Popen(
+        [sys.executable, "-u", "scripts/train.py", "--name", "t", "--size", "60", "28", "4",
+         "--cp-time-limit", "60", "--runs", str(tmp_path / "runs"), "--results", str(tmp_path / "results")],
+        cwd=root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    seen = []
+    for _ in range(20):
+        seen.append(proc.stdout.readline())
+        if "building pools" in seen[-1] or not seen[-1]:
+            break
+    assert "building pools" in seen[-1], "".join(seen)
+    time.sleep(1.0)
+    t0 = time.time()
+    proc.send_signal(signal.SIGINT)
+    out, _ = proc.communicate(timeout=30)
+    assert time.time() - t0 < 15
+    assert proc.returncode != 0
+    assert "interrupted while building pools" in out
+    assert not (tmp_path / "runs" / "t" / "pools.json").exists()

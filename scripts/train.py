@@ -99,6 +99,11 @@ def feasible_pool(n, m, k, first_seed, size, cp_time_limit, prefix):
     while len(insts) < size:
         inst = synthetic_instance(n, m, k, seed=seed, name=f"{prefix}{n}x{m}x{k}s{seed}")
         res = solve(Context(inst), BURKE_CURTOIS, time_limit=cp_time_limit, workers=4, seed=0)
+        # CP-SAT catches Ctrl+C itself: it ends the current solve early and Python never sees the
+        # signal. A solve that ends before its time limit without a proof (optimal or infeasible)
+        # was interrupted, so pool building stops here.
+        if res.status in ("UNKNOWN", "FEASIBLE") and res.wall_time < 0.9 * cp_time_limit:
+            raise KeyboardInterrupt
         if res.has_solution and res.feasible:
             insts.append(inst)
             records.append({"seed": seed, "name": inst.name, "J_cp": res.J, "cp_status": res.status,
@@ -232,8 +237,13 @@ def main():
             sys.exit(f"{pools_file} not found: nothing to resume")
         t0 = time.time()
         print(f"building pools of feasible {n}x{m}x{k} instances with CP-SAT ...", flush=True)
-        train_insts, train_rec = feasible_pool(n, m, k, args.train_seed0, args.train_pool, args.cp_time_limit, "train")
-        eval_insts, eval_rec = feasible_pool(n, m, k, args.eval_seed0, args.eval_pool, args.cp_time_limit, "eval")
+        try:
+            train_insts, train_rec = feasible_pool(n, m, k, args.train_seed0, args.train_pool,
+                                                   args.cp_time_limit, "train")
+            eval_insts, eval_rec = feasible_pool(n, m, k, args.eval_seed0, args.eval_pool,
+                                                 args.cp_time_limit, "eval")
+        except KeyboardInterrupt:
+            sys.exit("interrupted while building pools: nothing written (the same command starts over)")
         pools = {"size": [n, m, k], "train": train_rec, "eval": eval_rec}
         pools_file.write_text(json.dumps(pools, indent=1) + "\n")
         print(f"  {len(train_insts)} training, {len(eval_insts)} held-out instances ({time.time() - t0:.0f} s)")
