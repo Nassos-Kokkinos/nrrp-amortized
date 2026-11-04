@@ -4,6 +4,7 @@
   python scripts/eval_repair.py --name mac-5x7-1M
   python scripts/eval_repair.py --name mac-5x7-1M --budgets 0 0.05 0.2 1 5 --w0 1
   python scripts/eval_repair.py --name mac-5x7-1M --first-feasible   # the first-feasible form, for comparison
+  python scripts/eval_repair.py --name 25x7-F-ext-sep --empty-kappa 0 # V^∅ = pairs below rho only
 
 For every held-out instance of runs/<name>/ (pools.json, latest.zip), the policy
 builds a roster x^(T) (deterministic rollout by default, or the best of k
@@ -19,7 +20,12 @@ policy contributes beyond the repair operator. A good policy leaves few H^ter
 violations, hence a small V^ter and a small neighbourhood |V_w|; the summary
 reports both.
 
-results/repair/<name>[-best|-random]-anytime/   or   ...-first/  with --first-feasible (committed unless the name starts with provisional-)
+--empty-kappa 0 restricts V^∅ to the pairs below rho (genuine under-coverage):
+with kappa = 1, Eq. (40) as written also frees every pair whose optional
+(rho + 1)-th slot was left empty, about half of all pairs on 25x7, whatever the
+policy (measured 02/11/2026), so the neighbourhood is ~85% of the problem.
+
+results/repair/<name>[-best|-random]-anytime[-ek0]/   or   ...-first/  with --first-feasible (committed unless the name starts with provisional-)
   results.csv   one row per (instance, tau_cp): J, feasibility, violations, window reached,
                 |V_w| per subproblem, employees in V^ter, T_policy, T_repair, J and time of CP-SAT
   run.json      machine, versions, parameters, and the summary per tau_cp
@@ -37,7 +43,7 @@ from pathlib import Path
 
 import numpy as np
 
-FIELDS = ["instance", "tau_cp", "w0", "anytime", "source", "J_cp", "cp_status", "cp_seconds",
+FIELDS = ["instance", "tau_cp", "w0", "anytime", "source", "empty_kappa", "J_cp", "cp_status", "cp_seconds",
           "J_policy", "feasible_policy", "policy_ms", "J", "feasible", "gap_to_cp", "violations",
           "window", "windows", "statuses", "n_free", "n_vars", "n_ter_employees", "n_empty_pairs",
           "changed_cells", "repair_seconds", "infer_seconds"]
@@ -55,6 +61,9 @@ def main():
     ap.add_argument("--source", choices=["det", "best", "random"], default="det",
                     help="repair the deterministic rollout, the best of --k-samples stochastic ones, or a "
                          "uniformly random masked construction (ablation)")
+    ap.add_argument("--empty-kappa", type=int, default=None,
+                    help="kappa used for V^∅ (slots left unfilled): pairs below min(rho + this, n). Default: the "
+                         "training kappa, as Eq. (40) is written; 0 = only pairs below rho (genuine under-coverage)")
     ap.add_argument("--k-samples", type=int, default=8)
     ap.add_argument("--workers", type=int, default=8, help="CP-SAT workers in the repair")
     ap.add_argument("--seed", type=int, default=0)
@@ -78,6 +87,7 @@ def main():
     targs = config["args"]
     n, m, k = pools["size"]
     kappa = int(targs.get("kappa", 1))
+    empty_kappa = kappa if args.empty_kappa is None else int(args.empty_kappa)
     insts = rebuild_pool(n, m, k, pools["eval"])
     train_profile = burke_curtois_training(w_min_minutes=targs["w_min_minutes"],
                                            w_min_consecutive=targs["w_min_consecutive"])
@@ -100,11 +110,12 @@ def main():
         return env.roster, info["evaluation"]
 
     out = args.results / (args.out_name or (args.name + {"det": "", "best": "-best", "random": "-random"}[args.source]
-                                            + ("-first" if args.first_feasible else "-anytime")))
+                                            + ("-first" if args.first_feasible else "-anytime")
+                                            + ("" if empty_kappa == kappa else f"-ek{empty_kappa}")))
     out.mkdir(parents=True, exist_ok=True)
     budgets = sorted(set(args.budgets))
     print(f"{len(insts)} held-out {n}x{m}x{k} instances, model at {model.num_timesteps:,d} steps; "
-          f"source {args.source}, w0 {args.w0}, tau_cp {budgets} s", flush=True)
+          f"source {args.source}, w0 {args.w0}, V^∅ below rho + {empty_kappa}, tau_cp {budgets} s", flush=True)
     rows = []
     for idx, (inst, rec) in enumerate(zip(insts, pools["eval"])):
         ctx = Context(inst)
@@ -119,7 +130,7 @@ def main():
         t_pol = time.perf_counter() - t0
         for tau in budgets:
             if tau > 0:
-                r = repair(x, ctx, BURKE_CURTOIS, w0=args.w0, budget=tau, kappa=kappa,
+                r = repair(x, ctx, BURKE_CURTOIS, w0=args.w0, budget=tau, kappa=empty_kappa,
                            workers=args.workers, seed=args.seed, anytime=not args.first_feasible)
                 J, feas, viol = r.J, r.feasible, r.violations
                 extra = {"window": r.window, "windows": json.dumps(r.windows), "statuses": json.dumps(r.statuses),
@@ -131,7 +142,7 @@ def main():
                 extra = {"window": "", "windows": "[]", "statuses": "[]", "n_free": "[]", "n_ter_employees": "",
                          "n_empty_pairs": "", "changed_cells": 0, "repair_seconds": 0.0}
             rows.append({"instance": inst.name, "tau_cp": tau, "w0": args.w0, "anytime": not args.first_feasible,
-                         "source": args.source,
+                         "source": args.source, "empty_kappa": empty_kappa,
                          "J_cp": rec["J_cp"], "cp_status": rec["cp_status"], "cp_seconds": rec["cp_seconds"],
                          "J_policy": ev["J"], "feasible_policy": ev["feasible"],
                          "policy_ms": round(1000 * t_pol, 2), "J": J, "feasible": feas,

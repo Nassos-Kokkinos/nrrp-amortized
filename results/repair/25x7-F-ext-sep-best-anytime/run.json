@@ -1,0 +1,93 @@
+{
+  "training_run": "25x7-F-ext-sep",
+  "steps": 2000896,
+  "args": {
+    "name": "25x7-F-ext-sep",
+    "budgets": [
+      0.0,
+      0.02,
+      0.05,
+      0.1,
+      0.5,
+      2.0
+    ],
+    "w0": 1,
+    "first_feasible": false,
+    "source": "best",
+    "k_samples": 8,
+    "workers": 8,
+    "seed": 0,
+    "runs": "runs",
+    "results": "results/repair",
+    "out_name": null
+  },
+  "machine": {
+    "platform": "macOS-26.3-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "cpu_count": 10,
+    "python": "3.14.10",
+    "numpy": "2.5.4",
+    "torch": "2.15.0",
+    "gymnasium": "1.4.0",
+    "stable_baselines3": "2.9.2",
+    "sb3_contrib": "2.9.2",
+    "ortools": "9.15.6755"
+  },
+  "finished": "2026-11-02 12:25:34 +0200",
+  "summary": {
+    "0.0": {
+      "mean_J": 119.0,
+      "feasible": 0.1875,
+      "mean_gap_to_cp": 104.8125,
+      "mean_repair_seconds": 0.0,
+      "max_repair_seconds": 0.0,
+      "mean_ter_employees": null,
+      "mean_first_free_share": null
+    },
+    "0.02": {
+      "mean_J": 26.0,
+      "feasible": 1.0,
+      "mean_gap_to_cp": 11.8125,
+      "mean_repair_seconds": 0.0245125,
+      "max_repair_seconds": 0.0296,
+      "mean_ter_employees": 3.4375,
+      "mean_first_free_share": 0.8354761904761905
+    },
+    "0.05": {
+      "mean_J": 21.0625,
+      "feasible": 1.0,
+      "mean_gap_to_cp": 6.875,
+      "mean_repair_seconds": 0.05649375,
+      "max_repair_seconds": 0.0595,
+      "mean_ter_employees": 3.4375,
+      "mean_first_free_share": 0.8354761904761905
+    },
+    "0.1": {
+      "mean_J": 16.4375,
+      "feasible": 1.0,
+      "mean_gap_to_cp": 2.25,
+      "mean_repair_seconds": 0.10110625000000001,
+      "max_repair_seconds": 0.1094,
+      "mean_ter_employees": 3.4375,
+      "mean_first_free_share": 0.8354761904761905
+    },
+    "0.5": {
+      "mean_J": 14.1875,
+      "feasible": 1.0,
+      "mean_gap_to_cp": 0.0,
+      "mean_repair_seconds": 0.191275,
+      "max_repair_seconds": 0.4122,
+      "mean_ter_employees": 3.4375,
+      "mean_first_free_share": 0.8354761904761905
+    },
+    "2.0": {
+      "mean_J": 14.1875,
+      "feasible": 1.0,
+      "mean_gap_to_cp": 0.0,
+      "mean_repair_seconds": 0.17495,
+      "max_repair_seconds": 0.4195,
+      "mean_ter_employees": 3.4375,
+      "mean_first_free_share": 0.8354761904761905
+    }
+  }
+}
