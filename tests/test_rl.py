@@ -328,3 +328,65 @@ def test_ctrl_c_stops_pool_building(tmp_path):
     assert proc.returncode != 0
     assert "interrupted while building pools" in out
     assert not (tmp_path / "runs" / "t" / "pools.json").exists()
+
+
+def test_rerostering_run_end_to_end(tmp_path):
+    """train.py --reroster on a Burke & Curtois-format instance: a fresh xi ~ P per episode, a
+    held-out pool of CP-feasible contexts, resume, and eval_repair with the re-rostering baselines."""
+    import csv
+    import json
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    pytest.importorskip("ortools")
+    from nrrp.bc_format import write_bc, write_roster
+    from nrrp.cpsat import solve
+    from nrrp.instance import Context
+    root = Path(__file__).resolve().parents[1]
+    inst = synthetic_instance(6, 14, 2, seed=2, name="MiniBC")
+    res = solve(Context(inst), BURKE_CURTOIS, workers=1, deterministic_limit=30)
+    assert res.has_solution and res.feasible
+    (tmp_path / "solutions").mkdir()
+    write_bc(inst, tmp_path / "MiniBC.txt")
+    write_roster(res.roster, inst, tmp_path / "solutions" / f"MiniBC.Solution.{res.J:g}.roster", penalty=res.J)
+
+    def run(*args):
+        return subprocess.run([sys.executable, *args], cwd=root, capture_output=True, text=True, timeout=600)
+
+    common = ["--name", "rr", "--eval-pool", "2", "--n-steps", "64", "--batch-size", "32", "--n-epochs", "1",
+              "--eval-every", "128", "--save-every", "128", "--k-samples", "2", "--hidden", "16", "16",
+              "--cp-time-limit", "5", "--runs", str(tmp_path / "runs"), "--results", str(tmp_path / "results")]
+    out = run("scripts/train.py", "--reroster", str(tmp_path / "MiniBC.txt"), "--n-absent", "1", "1",
+              "--absence-days", "1", "2", "--mu", "2", "--features", "extended", "--timesteps", "256", *common)
+    assert out.returncode == 0, out.stdout + out.stderr
+    pools = json.loads((tmp_path / "runs" / "rr" / "pools.json").read_text())
+    assert pools["regime"] == "reroster" and pools["train"] == [] and len(pools["eval"]) == 2
+    assert pools["reroster"]["published"].endswith(f"MiniBC.Solution.{res.J:g}.roster")
+    assert all(r["d_xi"] >= 1 and r["absent_days"] >= 1 for r in pools["eval"])
+    assert "rejected" in pools
+    config = json.loads((tmp_path / "runs" / "rr" / "config.json").read_text())
+    assert config["regime"] == "reroster" and config["disruption"]["mu"] == 2
+    out = run("scripts/train.py", "--resume", "--timesteps", "384", *common)    # P and the pool are read back
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "pools read from" in out.stdout
+    rows = list(csv.DictReader((tmp_path / "results" / "rr" / "results.csv").open()))
+    assert len(rows) == 2
+
+    for extra, folder in (([], "rr-anytime"), (["--source", "published"], "rr-published-anytime"),
+                          (["--source", "random"], "rr-random-anytime")):
+        out = run("scripts/eval_repair.py", "--name", "rr", "--runs", str(tmp_path / "runs"),
+                  "--results", str(tmp_path / "repair"), "--budgets", "0", "2", "--workers", "1", *extra)
+        assert out.returncode == 0, out.stdout + out.stderr
+        rows = list(csv.DictReader((tmp_path / "repair" / folder / "results.csv").open()))
+        assert len(rows) == 4
+        repaired = [r for r in rows if float(r["tau_cp"]) == 2]
+        assert all(r["feasible"] == "True" for r in repaired)                 # pool contexts are CP-feasible
+        assert all(float(r["J"]) >= float(r["J_cp"]) - 1e-6 for r in repaired)
+        assert all(int(r["d_xi"]) >= 1 and int(r["changes"]) >= 0 for r in rows)
+        assert all(r["vs_cp_hint"] in ("win", "tie", "loss") and r["cp_hint_status"] for r in repaired)
+        assert "CP-SAT hinted with x°" in out.stdout
+    alone = [r for r in rows if float(r["tau_cp"]) == 0]
+    assert all(r["vs_cp_hint"] == "" for r in alone)
+    out = run("scripts/eval_repair.py", "--name", "t-none", "--runs", str(tmp_path / "runs"))
+    assert out.returncode != 0

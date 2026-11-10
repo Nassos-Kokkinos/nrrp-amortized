@@ -31,16 +31,23 @@ class GymRosterEnv(gym.Env):
     metadata = {"render_modes": []}
 
     def __init__(self, instances: Sequence[Instance], profile, *,
-                 contexts: Callable[[np.random.Generator, Instance], Context] | None = None,
+                 contexts: Callable[[np.random.Generator, Instance], Context] | Sequence[Context] | None = None,
                  kappa: int = 1, eval_profile=None, reward_scale: float = 1.0,
                  include_constants: bool = False, features: str = "table2"):
-        """``contexts``: None for construction (d_xi = 0, no disruption), or a
-        callable (rng, instance) -> Context drawing a re-rostering context.
+        """``contexts``: None for construction (d_xi = 0, no disruption), a
+        callable (rng, instance) -> Context drawing a re-rostering context at every
+        reset (training over P), or a sequence of Contexts, one per instance of the
+        pool, each fixed (a held-out pool of re-rostering contexts).
         ``features``: the state encoding, "table2" or "extended" (RosterEnv)."""
         super().__init__()
         instances = list(instances)
         if not instances:
             raise ValueError("the instance pool is empty")
+        self.fixed = contexts is not None and not callable(contexts)
+        if self.fixed:
+            contexts = list(contexts)
+            if len(contexts) != len(instances) or any(c.instance is not i for c, i in zip(contexts, instances)):
+                raise ValueError("fixed contexts must be one per instance of the pool, for that instance")
         n, k = instances[0].n_emp, instances[0].n_shifts
         odd = [i.name for i in instances if (i.n_emp, i.n_shifts) != (n, k)]
         if odd:
@@ -65,7 +72,9 @@ class GymRosterEnv(gym.Env):
         if idx not in self._envs:
             inst = self.instances[idx]
             ctx = None
-            if self.contexts is not None:
+            if self.fixed:
+                ctx = self.contexts[idx]
+            elif self.contexts is not None:
                 draw = self.contexts
                 ctx = (lambda rng, inst=inst: draw(rng, inst))
             self._envs[idx] = RosterEnv(inst, self.profile, contexts=ctx, kappa=self.kappa,

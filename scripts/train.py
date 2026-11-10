@@ -13,9 +13,23 @@ in four to one in three synthetic instances has none). The held-out pool uses
 other seeds and is never trained on; for each of its instances the CP-SAT
 optimum (or best found within --cp-time-limit) is the reference.
 
+Re-rostering regime (--reroster INSTANCE, Remark 5): one Burke & Curtois
+instance, x° fixed (by default its best published solution, --published to
+choose another), and a disruption xi ~ P drawn afresh at every training
+episode (nrrp/disruption.py: --n-absent, --absence-days, --mu), so that the
+policy never sees the same disruption twice. The held-out pool is
+--eval-pool contexts from seed --eval-seed0 on, kept if CP-SAT finds a feasible
+roster of (20) within --cp-time-limit (the CP-SAT result is the reference);
+the rejected ones are recorded in pools.json. --size is taken from the instance.
+
+  python scripts/train.py --name bc5-rr --reroster data/raw/Instance5.txt --features extended \
+      --separate-critic --ent-coef 0.001 --timesteps 2000000 --eval-every 100000 --save-every 100000 \
+      --cp-time-limit 60
+
 runs/<name>/ (git-ignored)
   config.json          every parameter, machine and versions
-  pools.json           seeds of the training and held-out pools, CP-SAT reference per held-out instance
+  pools.json           seeds of the training and held-out pools (re-rostering: of the held-out contexts, and
+                       P), CP-SAT reference per held-out instance or context
   latest.zip           the model, saved every --save-every steps and on Ctrl+C / kill -INT
   progress.csv         one row per evaluation: steps, wall time, J (deterministic and stochastic), feasibility, gap to CP-SAT
   progress_instances.csv  the same per held-out instance (for the per-instance grid of learning curves)
@@ -68,9 +82,12 @@ from pathlib import Path
 
 import numpy as np
 
+from nrrp.bc_format import read_bc, read_roster, solution_name
+from nrrp.disruption import DisruptionModel
 from nrrp.generator import synthetic_instance
 from nrrp.gym_env import GymRosterEnv
 from nrrp.instance import Context
+from nrrp.objective import evaluate as evaluate_roster
 from nrrp.profile import BURKE_CURTOIS, burke_curtois_training
 
 INSTANCE_FIELDS = ["steps", "instance", "J_cp", "J_det", "J_best_of_k", "feasible_det", "feasible_best_of_k"]
@@ -118,6 +135,61 @@ def rebuild_pool(n, m, k, records):
     return [synthetic_instance(n, m, k, seed=r["seed"], name=r["name"]) for r in records]
 
 
+def best_published(instance_file) -> Path:
+    """The published solution with the lowest value, ``solutions/<Instance>.Solution.VALUE.roster``
+    next to the instance file (Burke & Curtois)."""
+    instance_file = Path(instance_file)
+    found = [(solution_name(f)[1], f) for f in sorted((instance_file.parent / "solutions").glob("*.roster"))
+             if solution_name(f) and solution_name(f)[0] == instance_file.stem]
+    if not found:
+        raise FileNotFoundError(f"no published solution for {instance_file.stem} in {instance_file.parent / 'solutions'}")
+    return min(found)[1]
+
+
+def disruption_model(spec) -> DisruptionModel:
+    """The P of a re-rostering run, from the ``reroster`` entry of its pools.json."""
+    inst = read_bc(spec["instance"])
+    x0 = read_roster(spec["published"], inst)
+    return DisruptionModel(inst, x0, n_absent=tuple(spec["n_absent"]), days=tuple(spec["days"]),
+                           mu=float(spec["mu"]), first_day=int(spec.get("first_day", 1)))
+
+
+def pool_contexts(pools, which="eval") -> list:
+    """The contexts of a pool: construction (Context of each synthetic instance) or
+    re-rostering (the context of each seed under the run's P)."""
+    if pools.get("regime") == "reroster":
+        P = disruption_model(pools["reroster"])
+        return [P.context(r["seed"]) for r in pools[which]]
+    n, m, k = pools["size"]
+    return [Context(inst) for inst in rebuild_pool(n, m, k, pools[which])]
+
+
+def feasible_contexts(P, first_seed, size, cp_time_limit):
+    """``size`` re-rostering contexts, from seed ``first_seed`` on, for which CP-SAT finds a
+    feasible roster within ``cp_time_limit``; the others are recorded as rejected (X(phi) empty,
+    or nothing found in time). Returns (contexts, records, rejected)."""
+    from nrrp.cpsat import solve
+    ctxs, records, rejected, seed = [], [], [], first_seed
+    while len(ctxs) < size:
+        ctx = P.context(seed)
+        res = solve(ctx, BURKE_CURTOIS, time_limit=cp_time_limit, workers=4, seed=0)
+        if res.status in ("UNKNOWN", "FEASIBLE") and res.wall_time < 0.9 * cp_time_limit:
+            raise KeyboardInterrupt                      # Ctrl+C, caught by CP-SAT (see feasible_pool)
+        base = {"seed": seed, "name": ctx.name, "d_xi": ctx.d_xi, "absent_days": int(ctx.absent.sum()),
+                "cp_status": res.status, "cp_seconds": round(res.wall_time, 3)}
+        if res.has_solution and res.feasible:
+            ctxs.append(ctx)
+            records.append({**base, "J_cp": res.J, "cp_bound": res.bound})
+        else:
+            rejected.append(base)
+        print(f"    {ctx.name:18s} d_xi {ctx.d_xi:2d}  absent days {base['absent_days']:2d}  CP-SAT {res.status:10s} "
+              f"{'' if not (res.has_solution and res.feasible) else f'J {res.J:7.1f}'}  {res.wall_time:6.1f} s", flush=True)
+        seed += 1
+        if seed - first_seed > 20 * size:
+            raise RuntimeError(f"fewer than {size} feasible contexts in {20 * size} seeds")
+    return ctxs, records, rejected
+
+
 def run_episode(env, model, idx, deterministic, rng=None):
     obs, _ = env.reset(seed=None if rng is None else int(rng.integers(2**31 - 1)), options={"instance": idx})
     done, info = False, {}
@@ -160,7 +232,17 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--name", required=True, help="run name: runs/<name>/ and results/train/<name>/")
     ap.add_argument("--size", type=int, nargs=3, default=[5, 7, 3], metavar=("N", "M", "K"),
-                    help="employees, days, shift types of the synthetic pools")
+                    help="employees, days, shift types of the synthetic pools (construction regime)")
+    ap.add_argument("--reroster", type=Path, metavar="INSTANCE",
+                    help="re-rostering regime on this Burke & Curtois instance file (e.g. data/raw/Instance5.txt): "
+                         "x° fixed, a fresh disruption xi ~ P every episode")
+    ap.add_argument("--published", type=Path, metavar="ROSTER",
+                    help="x° for --reroster (default: the best published solution in solutions/ next to the instance)")
+    ap.add_argument("--n-absent", type=int, nargs=2, default=[1, 2], metavar=("LO", "HI"),
+                    help="P: number of absent employees, uniform on LO..HI")
+    ap.add_argument("--absence-days", type=int, nargs=2, default=[1, 7], metavar=("LO", "HI"),
+                    help="P: length of each absence in days, uniform on LO..HI, from d_xi")
+    ap.add_argument("--mu", type=float, default=1.0, help="P: weight of the instability Delta(x, x°) in J")
     ap.add_argument("--train-pool", type=int, default=64, help="training instances")
     ap.add_argument("--eval-pool", type=int, default=16, help="held-out instances")
     ap.add_argument("--train-seed0", type=int, default=0, help="first seed tried for the training pool")
@@ -216,6 +298,7 @@ def main():
     run.mkdir(parents=True, exist_ok=True)
     n, m, k = args.size
     torch.set_num_threads(max(1, min(4, os.cpu_count() or 1)))
+    P = None                                   # the disruption model, re-rostering regime only
 
     # pools: built once, then read back on --resume / --evaluate-only so that they never change
     pools_file = run / "pools.json"
@@ -227,11 +310,44 @@ def main():
         print(f"pools copied from {src}")
     if pools_file.exists():
         pools = json.loads(pools_file.read_text())
-        if tuple(pools["size"]) != (n, m, k):
-            sys.exit(f"{pools_file} is for size {pools['size']}, not {[n, m, k]}")
-        train_insts = rebuild_pool(n, m, k, pools["train"])
-        eval_insts = rebuild_pool(n, m, k, pools["eval"])
+        if pools.get("regime") == "reroster":
+            P = disruption_model(pools["reroster"])
+            n, m, k = P.instance.n_emp, P.instance.n_days, P.instance.n_shifts
+            if args.reroster and Path(pools["reroster"]["instance"]).stem != args.reroster.stem:
+                sys.exit(f"{pools_file} is for {pools['reroster']['instance']}, not {args.reroster}")
+            eval_ctxs = pool_contexts(pools)
+        else:
+            if args.reroster:
+                sys.exit(f"{pools_file} is a construction pool; --reroster needs a run of its own")
+            if tuple(pools["size"]) != (n, m, k):
+                sys.exit(f"{pools_file} is for size {pools['size']}, not {[n, m, k]}")
+            train_insts = rebuild_pool(n, m, k, pools["train"])
+            eval_ctxs = [Context(inst) for inst in rebuild_pool(n, m, k, pools["eval"])]
         print(f"pools read from {pools_file}")
+    elif args.reroster:
+        if args.resume or args.evaluate_only:
+            sys.exit(f"{pools_file} not found: nothing to resume")
+        published = args.published or best_published(args.reroster)
+        spec = {"instance": str(args.reroster), "published": str(published), "n_absent": list(args.n_absent),
+                "days": list(args.absence_days), "mu": args.mu, "first_day": 1}
+        P = disruption_model(spec)
+        ev0 = evaluate_roster(P.published, Context(P.instance), BURKE_CURTOIS)
+        if not ev0["feasible"]:
+            sys.exit(f"the published roster {published} violates hard constraints: {ev0['violations']}")
+        n, m, k = P.instance.n_emp, P.instance.n_days, P.instance.n_shifts
+        t0 = time.time()
+        print(f"re-rostering {P.instance.name} ({n}x{m}x{k}), x° = {published} (J {ev0['J']:g}); "
+              f"P: {args.n_absent[0]}-{args.n_absent[1]} absent for {args.absence_days[0]}-{args.absence_days[1]} days, "
+              f"mu {args.mu:g}", flush=True)
+        print("building the held-out pool of contexts with CP-SAT (training draws fresh ones) ...", flush=True)
+        try:
+            eval_ctxs, eval_rec, rejected = feasible_contexts(P, args.eval_seed0, args.eval_pool, args.cp_time_limit)
+        except KeyboardInterrupt:
+            sys.exit("interrupted while building pools: nothing written (the same command starts over)")
+        pools = {"regime": "reroster", "reroster": spec, "size": [n, m, k], "train": [], "eval": eval_rec,
+                 "rejected": rejected}
+        pools_file.write_text(json.dumps(pools, indent=1) + "\n")
+        print(f"  {len(eval_ctxs)} held-out contexts, {len(rejected)} rejected ({time.time() - t0:.0f} s)")
     else:
         if args.resume or args.evaluate_only:
             sys.exit(f"{pools_file} not found: nothing to resume")
@@ -246,6 +362,7 @@ def main():
             sys.exit("interrupted while building pools: nothing written (the same command starts over)")
         pools = {"size": [n, m, k], "train": train_rec, "eval": eval_rec}
         pools_file.write_text(json.dumps(pools, indent=1) + "\n")
+        eval_ctxs = [Context(inst) for inst in eval_insts]
         print(f"  {len(train_insts)} training, {len(eval_insts)} held-out instances ({time.time() - t0:.0f} s)")
 
     train_profile = burke_curtois_training(w_min_minutes=args.w_min_minutes,
@@ -253,13 +370,20 @@ def main():
     if args.resume or args.evaluate_only:      # the encoding the model was trained with
         prev = json.loads((run / "config.json").read_text())["args"] if (run / "config.json").exists() else {}
         args.features = prev.get("features", "table2")
-    env = GymRosterEnv(train_insts, train_profile, eval_profile=BURKE_CURTOIS,
-                       kappa=args.kappa, reward_scale=args.reward_scale, features=args.features)
-    eval_env = GymRosterEnv(eval_insts, train_profile, eval_profile=BURKE_CURTOIS,
-                            kappa=args.kappa, reward_scale=args.reward_scale, features=args.features)
+    if P is not None:                          # re-rostering: one instance, a fresh xi ~ P every episode
+        env = GymRosterEnv([P.instance], train_profile, contexts=P, eval_profile=BURKE_CURTOIS,
+                           kappa=args.kappa, reward_scale=args.reward_scale, features=args.features)
+    else:
+        env = GymRosterEnv(train_insts, train_profile, eval_profile=BURKE_CURTOIS,
+                           kappa=args.kappa, reward_scale=args.reward_scale, features=args.features)
+    eval_env = GymRosterEnv([c.instance for c in eval_ctxs], train_profile, contexts=eval_ctxs,
+                            eval_profile=BURKE_CURTOIS, kappa=args.kappa, reward_scale=args.reward_scale,
+                            features=args.features)
 
     config = {"args": {k_: (str(v) if isinstance(v, Path) else v) for k_, v in vars(args).items()},
               "machine": versions(), "train_profile": train_profile.describe(),
+              "regime": "reroster" if P is not None else "construction",
+              "disruption": P.describe() if P is not None else None,
               "eval_profile": BURKE_CURTOIS.name, "gamma": args.gamma,
               "started": time.strftime("%Y-%m-%d %H:%M:%S %z")}
     (run / ("config.json" if not (args.resume or args.evaluate_only) else "config_resume.json")).write_text(
