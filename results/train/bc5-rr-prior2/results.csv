@@ -1,0 +1,17 @@
+instance,J_cp,cp_status,J_det,feasible_det,gap_det,J_best_of_k,feasible_best_of_k,gap_best_of_k,k,violations_det,policy_ms_per_roster
+Instance5-xi100000,1262.0,FEASIBLE,2599.0,False,1.0594294770206023,2707.0,False,1.1450079239302695,8,"{""min_total_minutes"": 2520.0, ""min_consecutive_shifts"": 3.0}",31.36
+Instance5-xi100001,1471.0,OPTIMAL,2755.0,False,0.8728755948334467,2558.0,False,0.7389530931339225,8,"{""min_total_minutes"": 720.0, ""min_consecutive_shifts"": 1.0}",22.02
+Instance5-xi100002,1647.0,OPTIMAL,2073.0,False,0.2586520947176685,2074.0,True,0.25925925925925924,8,"{""min_total_minutes"": 360.0}",15.22
+Instance5-xi100003,1368.0,FEASIBLE,2439.0,False,0.7828947368421053,2440.0,False,0.783625730994152,8,"{""min_total_minutes"": 1200.0}",24.25
+Instance5-xi100004,1452.0,OPTIMAL,1676.0,True,0.15426997245179064,1671.0,True,0.15082644628099173,8,{},11.44
+Instance5-xi100005,1474.0,OPTIMAL,1780.0,True,0.20759837177747625,1783.0,True,0.20963364993215738,8,{},11.4
+Instance5-xi100006,1381.0,FEASIBLE,2507.0,False,0.8153511947863866,2409.0,False,0.7443881245474294,8,"{""min_total_minutes"": 1200.0}",25.88
+Instance5-xi100007,1469.0,FEASIBLE,2571.0,False,0.7501701837985024,2474.0,False,0.684138869979578,8,"{""min_total_minutes"": 1200.0}",25.43
+Instance5-xi100008,1446.0,OPTIMAL,1555.0,True,0.07538035961272475,1450.0,True,0.0027662517289073307,8,{},4.05
+Instance5-xi100009,1551.0,OPTIMAL,2006.0,False,0.2933591231463572,2105.0,True,0.35718891038039974,8,"{""min_consecutive_shifts"": 1.0}",18.31
+Instance5-xi100010,1246.0,OPTIMAL,1462.0,True,0.17335473515248795,1256.0,True,0.008025682182985553,8,{},5.13
+Instance5-xi100011,1250.0,FEASIBLE,2676.0,False,1.1408,2391.0,False,0.9128,8,"{""min_total_minutes"": 1560.0}",25.62
+Instance5-xi100012,1345.0,OPTIMAL,1778.0,True,0.32193308550185873,1670.0,True,0.241635687732342,8,{},15.19
+Instance5-xi100013,1281.0,FEASIBLE,3563.0,False,1.7814207650273224,3254.0,False,1.5402029664324746,8,"{""min_total_minutes"": 2040.0, ""min_consecutive_shifts"": 3.0}",35.55
+Instance5-xi100014,1260.0,FEASIBLE,2505.0,False,0.9880952380952381,2363.0,False,0.8753968253968254,8,"{""min_total_minutes"": 720.0, ""min_consecutive_shifts"": 1.0}",25.6
+Instance5-xi100015,1262.0,FEASIBLE,2262.0,False,0.7923930269413629,2157.0,False,0.7091917591125199,8,"{""min_total_minutes"": 720.0, ""min_consecutive_shifts"": 2.0}",26.56
