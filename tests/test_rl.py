@@ -359,8 +359,15 @@ def test_rerostering_run_end_to_end(tmp_path):
               "--eval-every", "128", "--save-every", "128", "--k-samples", "2", "--hidden", "16", "16",
               "--cp-time-limit", "5", "--runs", str(tmp_path / "runs"), "--results", str(tmp_path / "results")]
     out = run("scripts/train.py", "--reroster", str(tmp_path / "MiniBC.txt"), "--n-absent", "1", "1",
-              "--absence-days", "1", "2", "--mu", "2", "--features", "extended", "--timesteps", "256", *common)
+              "--absence-days", "1", "2", "--mu", "2", "--features", "extended", "--timesteps", "256",
+              "--val-pool", "2", *common)
     assert out.returncode == 0, out.stdout + out.stderr
+    for f in ("best.zip", "best.json", "validation.csv"):                # the best checkpoint on validation
+        assert (tmp_path / "runs" / "rr" / f).exists(), f
+    assert (tmp_path / "results" / "rr" / "results_best.csv").exists()
+    assert "best checkpoint on validation" in out.stdout
+    vals = list(csv.DictReader((tmp_path / "runs" / "rr" / "validation.csv").open()))
+    assert len(vals) == 3 and vals[0]["best"] == "True"                  # evaluations at 0, 128, 256 steps
     pools = json.loads((tmp_path / "runs" / "rr" / "pools.json").read_text())
     assert pools["regime"] == "reroster" and pools["train"] == [] and len(pools["eval"]) == 2
     assert pools["reroster"]["published"].endswith(f"MiniBC.Solution.{res.J:g}.roster")
@@ -375,7 +382,8 @@ def test_rerostering_run_end_to_end(tmp_path):
     assert len(rows) == 2
 
     for extra, folder in (([], "rr-anytime"), (["--source", "published"], "rr-published-anytime"),
-                          (["--source", "random"], "rr-random-anytime")):
+                          (["--source", "random"], "rr-random-anytime"),
+                          (["--checkpoint", "best"], "rr-bestckpt-anytime")):
         out = run("scripts/eval_repair.py", "--name", "rr", "--runs", str(tmp_path / "runs"),
                   "--results", str(tmp_path / "repair"), "--budgets", "0", "2", "--workers", "1", *extra)
         assert out.returncode == 0, out.stdout + out.stderr

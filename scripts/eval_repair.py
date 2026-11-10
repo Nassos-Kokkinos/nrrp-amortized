@@ -92,6 +92,9 @@ def main():
     ap.add_argument("--runs", type=Path, default=Path("runs"))
     ap.add_argument("--results", type=Path, default=Path("results/repair"))
     ap.add_argument("--out-name", help="folder under --results (default: <name>, plus -best with --source best)")
+    ap.add_argument("--checkpoint", choices=["latest", "best"], default="latest",
+                    help="the policy of runs/<name>/latest.zip, or best.zip (best on validation, train.py --val-pool); "
+                         "best adds -bestckpt to the folder name")
     args = ap.parse_args()
 
     import torch
@@ -122,7 +125,11 @@ def main():
     env = GymRosterEnv(insts, train_profile, contexts=ctxs, eval_profile=BURKE_CURTOIS, kappa=kappa,
                        reward_scale=targs.get("reward_scale", 0.01), features=targs.get("features", "table2"))
     torch.set_num_threads(1)               # inference latency of one rollout, one thread
-    model = MaskablePPO.load(run / "latest.zip", env=env, device="cpu")
+    ckpt = run / f"{args.checkpoint}.zip"
+    if not ckpt.exists():
+        sys.exit(f"{ckpt} not found" + (" (train with --val-pool to keep the best checkpoint)"
+                                         if args.checkpoint == "best" else ""))
+    model = MaskablePPO.load(ckpt, env=env, device="cpu")
     rng = np.random.default_rng(args.seed)
 
     def rollout(idx, deterministic, random_policy=False):
@@ -137,7 +144,8 @@ def main():
             obs, _, done, _, info = env.step(int(a))
         return env.roster, info["evaluation"]
 
-    out = args.results / (args.out_name or (args.name + {"det": "", "best": "-best", "random": "-random",
+    out = args.results / (args.out_name or (args.name + ("-bestckpt" if args.checkpoint == "best" else "")
+                                            + {"det": "", "best": "-best", "random": "-random",
                                                           "published": "-published"}[args.source]
                                             + ("-first" if args.first_feasible else "-anytime")
                                             + ("" if empty_kappa == kappa else f"-ek{empty_kappa}")))

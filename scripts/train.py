@@ -31,6 +31,8 @@ runs/<name>/ (git-ignored)
   pools.json           seeds of the training and held-out pools (re-rostering: of the held-out contexts, and
                        P), CP-SAT reference per held-out instance or context
   latest.zip           the model, saved every --save-every steps and on Ctrl+C / kill -INT
+  best.zip, best.json  with --val-pool: the checkpoint best on the validation contexts, and its score
+  validation.csv       with --val-pool: the validation score at every evaluation
   progress.csv         one row per evaluation: steps, wall time, J (deterministic and stochastic), feasibility, gap to CP-SAT
   progress_instances.csv  the same per held-out instance (for the per-instance grid of learning curves)
   tb/                  TensorBoard logs (tensorboard --logdir runs)
@@ -251,6 +253,11 @@ def main():
     ap.add_argument("--eval-pool", type=int, default=16, help="held-out instances")
     ap.add_argument("--train-seed0", type=int, default=0, help="first seed tried for the training pool")
     ap.add_argument("--eval-seed0", type=int, default=100000, help="first seed tried for the held-out pool")
+    ap.add_argument("--val-pool", type=int, default=0,
+                    help="re-rostering: validation contexts from seed --val-seed0 on (no CP-SAT needed, never in the "
+                         "held-out pool); at every evaluation the deterministic policy is scored on them and the best "
+                         "checkpoint (fewest infeasible, then lowest mean J) is kept as runs/<name>/best.zip")
+    ap.add_argument("--val-seed0", type=int, default=200000, help="first seed of the validation contexts")
     ap.add_argument("--timesteps", type=int, default=200_000, help="total environment steps (cumulative on --resume)")
     ap.add_argument("--eval-every", type=int, default=20_000)
     ap.add_argument("--save-every", type=int, default=20_000)
@@ -385,6 +392,14 @@ def main():
     eval_env = GymRosterEnv([c.instance for c in eval_ctxs], train_profile, contexts=eval_ctxs,
                             eval_profile=BURKE_CURTOIS, kappa=args.kappa, reward_scale=args.reward_scale,
                             features=args.features)
+    val_env = None                             # validation contexts, for the best checkpoint
+    if args.val_pool > 0:
+        if P is None:
+            sys.exit("--val-pool is for re-rostering runs (--reroster)")
+        val_ctxs = [P.context(args.val_seed0 + j) for j in range(args.val_pool)]
+        val_env = GymRosterEnv([c.instance for c in val_ctxs], train_profile, contexts=val_ctxs,
+                               eval_profile=BURKE_CURTOIS, kappa=args.kappa, reward_scale=args.reward_scale,
+                               features=args.features)
 
     config = {"args": {k_: (str(v) if isinstance(v, Path) else v) for k_, v in vars(args).items()},
               "machine": versions(), "train_profile": train_profile.describe(),
@@ -430,6 +445,25 @@ def main():
     progress = run / "progress.csv"
 
     progress_inst = run / "progress_instances.csv"
+    validation, best_zip, best_json = run / "validation.csv", run / "best.zip", run / "best.json"
+
+    def log_validation(steps):
+        """Score the deterministic policy on the validation contexts; keep the best checkpoint."""
+        vals = [run_episode(val_env, model, j, True)[:2] for j in range(args.val_pool)]
+        score = [float(np.mean([not f for _, f in vals])), float(np.mean([j for j, _ in vals]))]
+        best = json.loads(best_json.read_text()) if best_json.exists() else None
+        better = best is None or tuple(score) < tuple(best["score"])     # fewer infeasible, then lower J
+        if better:
+            model.save(best_zip)
+            best_json.write_text(json.dumps({"steps": steps, "score": score}) + "\n")
+        new = not validation.exists()
+        with validation.open("a", newline="") as fh:
+            w = csv.writer(fh)
+            if new:
+                w.writerow(["steps", "J_val", "feasible_val", "best"])
+            w.writerow([steps, score[1], 1 - score[0], better])
+        print(f"  {'':>9s}        {'':>7s}     validation: det {score[1]:8.1f}  feasible {1 - score[0]:.0%}"
+              f"{'   <- best so far, saved best.zip' if better else ''}", flush=True)
 
     def log_eval(steps, wall):
         rows = evaluate(model, eval_env, pools["eval"], k_samples=args.k_samples, seed=args.seed)
@@ -457,6 +491,8 @@ def main():
         print(f"  {steps:>9,d} steps  {wall:7.0f} s   held-out J: det {s['J_det']:8.1f}  best-of-{args.k_samples} "
               f"{s['J_stoch']:8.1f}  CP-SAT {s['J_cp']:7.1f}   feasible: det {s['feasible_det']:.0%} "
               f"best-of-k {s['feasible_stoch']:.0%}", flush=True)
+        if val_env is not None:
+            log_validation(steps)
         return rows
 
     class Periodic(BaseCallback):
@@ -510,12 +546,25 @@ def main():
         w = csv.DictWriter(fh, fieldnames=RESULT_FIELDS)
         w.writeheader()
         w.writerows(rows)
-    for f in (progress, progress_inst):
+    for f in (progress, progress_inst, validation):
         if f.exists():
             (out / f.name).write_text(f.read_text())
+    extra = {}
+    if best_zip.exists():                      # the best checkpoint on validation, on the held-out pool
+        best = json.loads(best_json.read_text())
+        best_model = MaskablePPO.load(best_zip, env=env, device="cpu")
+        rows_best = evaluate(best_model, eval_env, pools["eval"], k_samples=args.k_samples, seed=args.seed)
+        with (out / "results_best.csv").open("w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=RESULT_FIELDS)
+            w.writeheader()
+            w.writerows(rows_best)
+        extra = {"best_steps": best["steps"], "best_validation": best["score"], "summary_best": summary(rows_best)}
+        sb = extra["summary_best"]
+        print(f"\nbest checkpoint on validation: {best['steps']:,d} steps; on the held-out pool J det "
+              f"{sb['J_det']:.1f}, feasible {sb['feasible_det']:.0%} (results_best.csv)")
     (out / "run.json").write_text(json.dumps({**config, "steps": model.num_timesteps,
                                               "finished": time.strftime("%Y-%m-%d %H:%M:%S %z"),
-                                              "summary": summary(rows)}, indent=2) + "\n")
+                                              "summary": summary(rows), **extra}, indent=2) + "\n")
     s = summary(rows)
     print(f"\nfinal, {len(rows)} held-out instances, {model.num_timesteps:,d} steps:")
     print(f"  mean J: policy deterministic {s['J_det']:.1f}, best of {args.k_samples} {s['J_stoch']:.1f}, "
