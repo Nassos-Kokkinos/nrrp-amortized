@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import torch
 from sb3_contrib.common.maskable.policies import MaskableActorCriticPolicy
+from stable_baselines3.common.policies import ActorCriticPolicy
 from torch import nn
 
 
@@ -192,3 +193,80 @@ def transfer_state(policy: EmployeePolicy, state: dict) -> list:
         raise ValueError(f"source policy lacks {missing}")
     policy.load_state_dict(own)
     return copied
+
+
+# ------------------------------------------------------------------ learned LNS (nrrp/lns_env.py)
+
+class LNSExtractor(nn.Module):
+    """Per-employee scores for the release decision of the learned LNS:
+
+        h_i     = MLP([e_i, g])        one MLP shared by all employees (as Eq. (39))
+        logit_i = w^T h_i + b          log-odds of releasing employee i for CP-SAT
+        V       = MLP_v(mean_i h'_i)   value from a separate encoder
+
+    equivariant in the employees, with no parameter that depends on n. The bias b
+    starts at ``init_bias`` (-2: about one employee in eight released per step)."""
+
+    def __init__(self, n_emp: int, d_e: int, d_g: int, hidden=(64, 64), value_hidden=(64,),
+                 activation=nn.Tanh, init_bias: float = -2.0):
+        super().__init__()
+        self.n, self.d_e, self.d_g, self.init_bias = int(n_emp), int(d_e), int(d_g), float(init_bias)
+        self.encoder = _mlp([d_e + d_g, *hidden], activation)
+        self.critic_encoder = _mlp([d_e + d_g, *hidden], activation)
+        self.score = nn.Linear(hidden[-1], 1)
+        self.value_body = _mlp([hidden[-1], *value_hidden], activation) if value_hidden else nn.Identity()
+        self.latent_dim_pi = self.n
+        self.latent_dim_vf = value_hidden[-1] if value_hidden else hidden[-1]
+
+    def inputs(self, obs: torch.Tensor) -> torch.Tensor:
+        b = obs.shape[0]
+        rows = obs[:, : self.n * self.d_e].reshape(b, self.n, self.d_e)
+        g = obs[:, self.n * self.d_e:]
+        return torch.cat([rows, g.unsqueeze(1).expand(-1, self.n, -1)], dim=-1)
+
+    def forward_actor(self, obs: torch.Tensor) -> torch.Tensor:
+        return self.score(self.encoder(self.inputs(obs))).squeeze(-1)          # (batch, n) log-odds
+
+    def forward_critic(self, obs: torch.Tensor) -> torch.Tensor:
+        return self.value_body(self.critic_encoder(self.inputs(obs)).mean(dim=1))
+
+    def forward(self, obs: torch.Tensor):
+        x = self.inputs(obs)
+        return self.score(self.encoder(x)).squeeze(-1), self.value_body(self.critic_encoder(x).mean(dim=1))
+
+
+class LNSPolicy(ActorCriticPolicy):
+    """PPO policy for :class:`nrrp.lns_env.LNSEnv`: a MultiBinary action, one Bernoulli per
+    employee, with the logits of :class:`LNSExtractor`. policy_kwargs: ``n_emp``, and
+    optionally ``hidden``, ``value_hidden``, ``init_bias``."""
+
+    def __init__(self, observation_space, action_space, lr_schedule, *, n_emp: int,
+                 hidden=(64, 64), value_hidden=(64,), init_bias: float = -2.0,
+                 activation_fn=nn.Tanh, **kwargs):
+        from .lns_env import LNSEnv
+        self._n_emp, self._hidden, self._value_hidden = int(n_emp), tuple(hidden), tuple(value_hidden)
+        self._init_bias = float(init_bias)
+        self._d_e, self._d_g = len(LNSEnv.FEATURES), len(LNSEnv.GLOBAL)
+        want = self._n_emp * self._d_e + self._d_g
+        if observation_space.shape != (want,):
+            raise ValueError(f"observation of shape {observation_space.shape}, expected ({want},) for {n_emp} employees")
+        if action_space.n != self._n_emp:
+            raise ValueError(f"{action_space.n} binary actions, expected {self._n_emp}")
+        super().__init__(observation_space, action_space, lr_schedule, activation_fn=activation_fn, **kwargs)
+
+    def _build_mlp_extractor(self) -> None:
+        self.mlp_extractor = LNSExtractor(self._n_emp, self._d_e, self._d_g, self._hidden, self._value_hidden,
+                                          self.activation_fn, self._init_bias)
+
+    def _build(self, lr_schedule) -> None:
+        super()._build(lr_schedule)
+        self.action_net = nn.Identity()               # the actor latent already holds the n log-odds
+        nn.init.orthogonal_(self.mlp_extractor.score.weight, gain=0.01)
+        nn.init.constant_(self.mlp_extractor.score.bias, self._init_bias)
+        self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
+
+    def _get_constructor_parameters(self):
+        data = super()._get_constructor_parameters()
+        data.update(n_emp=self._n_emp, hidden=self._hidden, value_hidden=self._value_hidden,
+                    init_bias=self._init_bias)
+        return data
