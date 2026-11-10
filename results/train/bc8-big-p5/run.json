@@ -1,0 +1,117 @@
+{
+  "args": {
+    "name": "bc8-big-p5",
+    "size": [
+      5,
+      7,
+      3
+    ],
+    "reroster": "data/raw/Instance8.txt",
+    "published": null,
+    "n_absent": [
+      3,
+      5
+    ],
+    "absence_days": [
+      3,
+      7
+    ],
+    "mu": 1.0,
+    "published_prior": 5.0,
+    "train_pool": 64,
+    "eval_pool": 16,
+    "train_seed0": 0,
+    "eval_seed0": 100000,
+    "val_pool": 16,
+    "val_seed0": 200000,
+    "timesteps": 2000000,
+    "eval_every": 100000,
+    "save_every": 100000,
+    "k_samples": 8,
+    "kappa": 1,
+    "reward_scale": 0.01,
+    "w_min_minutes": 0.2,
+    "w_min_consecutive": 100.0,
+    "lr": 3e-05,
+    "n_steps": 2048,
+    "batch_size": 256,
+    "n_epochs": 10,
+    "ent_coef": 0.001,
+    "hidden": [
+      64,
+      64
+    ],
+    "gamma": 1.0,
+    "gae_lambda": 0.95,
+    "lr_schedule": "constant",
+    "target_kl": null,
+    "vf_coef": 0.5,
+    "clip_range": 0.2,
+    "features": "extended",
+    "separate_critic": true,
+    "pools_from": null,
+    "init_from": null,
+    "seed": 0,
+    "label": "Instance8 big, prior 5, lr 3e-5",
+    "cp_time_limit": 60.0,
+    "resume": false,
+    "evaluate_only": false,
+    "runs": "runs",
+    "results": "results/train"
+  },
+  "machine": {
+    "platform": "macOS-26.3-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "cpu_count": 10,
+    "python": "3.14.10",
+    "numpy": "2.5.4",
+    "torch": "2.15.0",
+    "gymnasium": "1.4.0",
+    "stable_baselines3": "2.9.2",
+    "sb3_contrib": "2.9.2",
+    "ortools": "9.15.6755"
+  },
+  "train_profile": "profile burke_curtois_training\n  H^pre (hard, prefix-monotone, masked): shift_rotation, max_shifts_per_type, max_total_minutes, max_consecutive_shifts, min_consecutive_days_off, max_weekends, days_off, unavailability, skills\n  H^ter (hard, not prefix-monotone, repaired): -\n  penalised: min_total_minutes (w=0.2 per minutes), min_consecutive_shifts (w=100 per days short)\n  off: min_coverage",
+  "regime": "reroster",
+  "disruption": {
+    "instance": "Instance8",
+    "n_absent": [
+      3,
+      5
+    ],
+    "days": [
+      3,
+      7
+    ],
+    "mu": 1.0,
+    "first_day": 1
+  },
+  "eval_profile": "burke_curtois",
+  "gamma": 1.0,
+  "started": "2026-11-10 14:34:37 +0200",
+  "steps": 2000896,
+  "finished": "2026-11-10 14:46:19 +0200",
+  "summary": {
+    "J_det": 2544.4375,
+    "J_stoch": 2930.4375,
+    "J_cp": 2250.875,
+    "gap_det": 0.13407610200056422,
+    "gap_stoch": 0.3031952712350988,
+    "feasible_det": 1.0,
+    "feasible_stoch": 0.6875
+  },
+  "best_steps": 0,
+  "best_validation": [
+    0.0,
+    2732.1875
+  ],
+  "summary_best": {
+    "J_det": 2544.4375,
+    "J_stoch": 2754.0625,
+    "J_cp": 2250.875,
+    "gap_det": 0.13407610200056422,
+    "gap_stoch": 0.22695892256200423,
+    "feasible_det": 1.0,
+    "feasible_stoch": 0.875
+  }
+}
