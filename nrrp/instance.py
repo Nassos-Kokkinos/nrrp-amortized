@@ -198,6 +198,16 @@ class Context:
     * ``absent`` (n, m) is A_xi, allowed only on d >= d_xi;
     * ``mu`` weighs the instability Delta(x, x°).
 
+    Absences are credited (decision of 10/11/2026), as sick leave counts
+    towards contractual hours:
+
+    * ``credit`` (n,): the minutes of the shifts x° had on the absent days of
+      each employee; the lower bound of (5) becomes ``min_minutes`` =
+      max(H^min_i - credit_i, 0);
+    * an absent day acts like an end of the horizon for the minimum stretch (9):
+      a work stretch next to an absence is exempt, as one touching day 1 or
+      day m already is.
+
     Construction is the special case d_xi = 0, A_xi empty, mu = 0, and the
     empty published roster (the default).
     """
@@ -226,11 +236,18 @@ class Context:
                        else _arr(self.absent, bool, (I, D), "absent"))
         if self.absent[:, : self.d_xi].any():
             raise ValueError("a disruption cannot mark days before d_xi")
+        lost = self.absent & (self.published != OFF)            # shifts of x° the absences cancel
+        self.credit = np.where(lost, inst.shift_len[np.where(lost, self.published, 0)], 0).sum(axis=1)
         self.mu = float(self.mu)
         if self.mu < 0:
             raise ValueError("mu must be non-negative")
         if not self.name:
             self.name = f"{inst.name}@d{self.d_xi}"
+
+    @property
+    def min_minutes(self) -> np.ndarray:
+        """(n,) the lower bound of (5) in this context: H^min_i less the credited absences."""
+        return np.maximum(self.instance.min_minutes - self.credit, 0)
 
     @property
     def is_construction(self) -> bool:

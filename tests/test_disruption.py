@@ -96,3 +96,43 @@ def test_repairing_the_published_roster_without_the_absences(published):
     if res.feasible:
         assert (res.roster[ctx.absent] == OFF).all()
         assert res.J >= exact.J - 1e-6
+
+
+def test_absences_are_credited_towards_the_minimum_minutes(published):
+    """Decision of 10/11/2026: the shifts x° had on the absent days count towards H^min."""
+    from nrrp.constraints import MinTotalMinutes
+    inst, x0 = published
+    i = int(np.flatnonzero((x0 != OFF).sum(axis=1) >= 3)[0])
+    days = np.flatnonzero(x0[i] != OFF)[1:3]                    # two worked days, after day 0
+    absent = np.zeros_like(x0, bool)
+    absent[i, days] = True
+    ctx = Context(inst, d_xi=int(days[0]), published=x0, absent=absent, mu=1.0)
+    lost = int(inst.shift_len[x0[i, days]].sum())
+    assert ctx.credit[i] == lost and ctx.credit.sum() == lost
+    assert ctx.min_minutes[i] == max(int(inst.min_minutes[i]) - lost, 0)
+    np.testing.assert_array_equal(np.delete(ctx.min_minutes, i), np.delete(inst.min_minutes, i))
+    x = without_absences(ctx)                                    # x° less the two cancelled shifts
+    assert MinTotalMinutes().violation_row(i, x[i], ctx) == 0    # the credit covers them
+    assert (Context(inst).credit == 0).all()                     # construction: nothing credited
+
+
+def test_a_work_stretch_next_to_an_absence_is_exempt():
+    """An absence acts like an end of the horizon for the minimum stretch (9)."""
+    from nrrp.constraints import MinConsecutiveShifts
+    inst = synthetic_instance(3, 10, 1, seed=0)
+    inst.min_consec[:] = 3
+    c = MinConsecutiveShifts()
+    row = np.full(10, OFF, np.int8)
+    row[3:5] = 0                                                 # a 2-day stretch, days 3-4
+    pub = np.full((3, 10), OFF, np.int8)
+
+    def absent_on(day):
+        absent = np.zeros((3, 10), bool)
+        if day is not None:
+            absent[0, day] = True
+        return Context(inst, d_xi=2, published=pub, absent=absent)
+
+    assert c.violation_row(0, row, absent_on(None)) == 1         # interior, one day short
+    assert c.violation_row(0, row, absent_on(2)) == 0            # absence just before: exempt
+    assert c.violation_row(0, row, absent_on(5)) == 0            # absence just after: exempt
+    assert c.violation_row(0, row, absent_on(7)) == 1            # further away: no effect

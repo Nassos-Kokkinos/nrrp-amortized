@@ -322,7 +322,7 @@ def _enc_max_total_minutes(M: RosterModel, pen):
 def _enc_min_total_minutes(M: RosterModel, pen):
     inst, out = M.inst, []
     for i in range(M.x.shape[0]):
-        floor = int(inst.min_minutes[i])
+        floor = int(M.ctx.min_minutes[i])           # H^min less the credited absences
         if floor <= 0:
             continue
         if pen is None:
@@ -350,15 +350,20 @@ def _enc_max_consecutive_shifts(M: RosterModel, pen):
     return out
 
 
-def _interior_run_patterns(M: RosterModel, i, m_min, work: bool, pen, tag):
+def _interior_run_patterns(M: RosterModel, i, m_min, work: bool, pen, tag, boundary=None):
     """Runs of worked (work=True) or off days of length L < m_min that start after day 0
-    and end before the last day; each costs m_min - L (constraints (9), (10))."""
+    and end before the last day; each costs m_min - L (constraints (9), (10)).
+    ``boundary`` (m,) bool: days that act like an end of the horizon (absences, for (9));
+    a run next to one is exempt."""
     w, out = M.w, []
     D = w.shape[1]
+    boundary = np.zeros(D, bool) if boundary is None else boundary
     on = (lambda v: v) if work else (lambda v: v.Not())    # literal "day is in the run"
     off = (lambda v: v.Not()) if work else (lambda v: v)   # literal "day is outside the run"
     for L in range(1, m_min):
         for a in range(1, D - L):           # run a..a+L-1, neighbours a-1 and a+L inside the horizon
+            if boundary[a - 1] or boundary[a + L]:
+                continue                    # next to an absence: exempt
             run = [on(w[i, k]) for k in range(a, a + L)]
             left, right = off(w[i, a - 1]), off(w[i, a + L])
             # pattern holds iff left and all of run and right
@@ -375,7 +380,8 @@ def _interior_run_patterns(M: RosterModel, i, m_min, work: bool, pen, tag):
 def _enc_min_consecutive_shifts(M: RosterModel, pen):
     out = []
     for i in range(M.x.shape[0]):
-        out += _interior_run_patterns(M, i, int(M.inst.min_consec[i]), True, pen, "mincons")
+        out += _interior_run_patterns(M, i, int(M.inst.min_consec[i]), True, pen, "mincons",
+                                      boundary=M.ctx.absent[i])
     return out
 
 

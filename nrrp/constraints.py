@@ -39,6 +39,11 @@ rotation and maximum consecutive shifts, the day before the horizon and the
 day after it are days off. For minimum consecutive shifts and minimum
 consecutive days off, an unbounded run is assumed on both sides of the
 horizon, so a run touching either end is exempt.
+
+Absences in re-rostering are credited (see :class:`nrrp.instance.Context`): the
+minimum total minutes is reduced by the minutes of the cancelled shifts of x°,
+and a work run next to an absent day is exempt from the minimum consecutive
+shifts, like a run touching an end of the horizon.
 """
 from __future__ import annotations
 
@@ -179,10 +184,10 @@ class MinTotalMinutes(Constraint):
     def violation_row(self, i, row, ctx):
         inst = ctx.instance
         total = int(inst.shift_len[row[row != OFF]].sum())
-        return float(max(int(inst.min_minutes[i]) - total, 0))
+        return float(max(int(ctx.min_minutes[i]) - total, 0))          # H^min less the credited absences
 
     def delta(self, st, d, s):
-        m, floor, L = st.minutes, st.inst.min_minutes, st.inst.shift_len[s]
+        m, floor, L = st.minutes, st.ctx.min_minutes, st.inst.shift_len[s]
         return (np.maximum(floor - m - L, 0) - np.maximum(floor - m, 0)).astype(float)
 
 
@@ -209,15 +214,23 @@ class MinConsecutiveShifts(Constraint):
     def violation_row(self, i, row, ctx):
         m, D = int(ctx.instance.min_consec[i]), len(row)
         a, b = true_runs(row != OFF)
-        interior = (a > 0) & (b < D)
+        absent = ctx.absent[i]
+        # a run is exempt if it touches day 1 or day m, or if an absence is next to it
+        left = np.where(a > 0, absent[np.maximum(a - 1, 0)], True)
+        right = np.where(b < D, absent[np.minimum(b, D - 1)], True)
+        interior = ~left & ~right
         return float(np.maximum(m - (b - a), 0)[interior].sum())
 
     def delta(self, st, d, s):
         r, m, D = st.run_work, st.inst.min_consec, st.inst.n_days
+        ab = st.ctx.absent
+        # is the day before the run [d-r, d) an absence? (the run starts after day 0 iff r < d)
+        left = np.where(r < d, ab[st.rows, np.maximum(d - r - 1, 0)], False)
+        right_after = ab[:, d + 1] if d < D - 1 else np.zeros(len(st.rows), bool)
         # before: the run [d-r, d) is followed by the empty day d
-        before = np.where((r > 0) & (r < d), np.maximum(m - r, 0), 0)
-        # after: the run [d-r, d+1); interior iff it starts after day 0 and d+1 < D
-        after = np.where((r < d) & (d < D - 1), np.maximum(m - r - 1, 0), 0)
+        before = np.where((r > 0) & (r < d) & ~left & ~ab[:, d], np.maximum(m - r, 0), 0)
+        # after: the run [d-r, d+1); interior iff it starts after day 0, d+1 < D, no absence next to it
+        after = np.where((r < d) & (d < D - 1) & ~left & ~right_after, np.maximum(m - r - 1, 0), 0)
         return (after - before).astype(float)
 
 

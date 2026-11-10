@@ -113,13 +113,14 @@ def features_from_scratch(env: RosterEnv) -> np.ndarray:
     G = np.zeros_like(env.G, dtype=float)
     before = roster[:, :d]
     mins = np.where(before != OFF, inst.shift_len[np.where(before != OFF, before, 0)], 0).sum(axis=1)
-    hmax, hmin = np.maximum(inst.max_minutes, 1), np.maximum(inst.min_minutes, 1)
+    floor = ctx.min_minutes                                  # H^min less the credited absences
+    hmax, hmin = np.maximum(inst.max_minutes, 1), np.maximum(floor, 1)
     w_req = max(inst.on_req.max(), inst.off_req.max(), 1.0)
     mask = mask_from_scratch(env)
     E[:, env.P] = (inst.off_req[:, d, s] - inst.on_req[:, d, s]) / w_req
     E[:, env.X0] = ctx.published[:, d] == s
     E[:, env.MINUTES] = np.minimum(mins / hmax, 1.0)
-    E[:, env.SHORTFALL] = np.maximum(inst.min_minutes - mins, 0) / hmin
+    E[:, env.SHORTFALL] = np.maximum(floor - mins, 0) / hmin
     E[:, env.SLACK] = np.clip((inst.max_minutes - mins) / hmax, -1.0, 1.0)
     E[:, env.RUN_WORK] = np.minimum(st.run_work / np.maximum(inst.max_consec, 1), 1.0)
     E[:, env.REST] = np.minimum(st.run_off / np.maximum(inst.min_consec_off, 1), 1.0)
@@ -143,10 +144,13 @@ def features_from_scratch(env: RosterEnv) -> np.ndarray:
         from .objective import linear_costs
         X, GX = env.EX, env.GX
         r = st.run_work
-        E[:, X + env.RUN_DEFICIT] = np.where((r > 0) & (r < d), np.maximum(inst.min_consec - r, 0), 0) / \
-            np.maximum(inst.min_consec, 1)
+        for i in range(I):          # the run ending at d-1 if it ended now: exempt at day 1 or next to an absence
+            start = d - r[i]
+            interior = r[i] > 0 and start > 0 and not ctx.absent[i, start - 1] and not ctx.absent[i, d]
+            short_run = max(int(inst.min_consec[i]) - int(r[i]), 0) if interior else 0
+            E[i, X + env.RUN_DEFICIT] = short_run / max(int(inst.min_consec[i]), 1)
         L = float(inst.shift_len[s])
-        E[:, X + env.URGENCY] = np.minimum(np.maximum(inst.min_minutes - mins, 0) / (L * (D - d)), 1.0)
+        E[:, X + env.URGENCY] = np.minimum(np.maximum(floor - mins, 0) / (L * (D - d)), 1.0)
         lin = linear_costs(ctx)
         for i in np.flatnonzero(mask[:I]):          # immediate cost: penalised violation before / after
             row = roster[i].copy()
@@ -157,7 +161,7 @@ def features_from_scratch(env: RosterEnv) -> np.ndarray:
         G[GX + env.G_SHIFT_LEN] = min(L / env.SHIFT_LEN_SCALE, 1.0)
         all_rows = roster != OFF
         now = np.where(all_rows, inst.shift_len[np.where(all_rows, roster, 0)], 0).sum(axis=1)
-        short = np.maximum(inst.min_minutes - now, 0).sum()
+        short = np.maximum(floor - now, 0).sum()
         cap = (rho_bar[d, s] - k) * L
         for dd in range(d, D):
             for ss in range(inst.n_shifts):

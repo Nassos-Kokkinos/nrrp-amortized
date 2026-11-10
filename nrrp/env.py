@@ -136,7 +136,6 @@ class RosterEnv:
         w_req = max(float(inst.on_req.max()), float(inst.off_req.max()), 1.0)
         self.p_f = ((inst.off_req - inst.on_req) / w_req).astype(np.float32)
         self.inv_hmax = 1.0 / np.maximum(inst.max_minutes, 1)
-        self.inv_hmin = 1.0 / np.maximum(inst.min_minutes, 1)
         self.inv_cmax = 1.0 / np.maximum(inst.max_consec, 1)
         self.inv_rmin = 1.0 / np.maximum(inst.min_consec_off, 1)
         self.inv_nmax = 1.0 / np.maximum(inst.max_shifts, 1)
@@ -176,6 +175,8 @@ class RosterEnv:
         self.c_con = context_constant(ctx, self.profile)
         self.roster_init = initial_roster(ctx)
         self.x0_f = roster_to_binary(ctx.published, S).astype(np.float32)
+        self.hmin = ctx.min_minutes                         # H^min less the credited absences
+        self.inv_hmin = 1.0 / np.maximum(self.hmin, 1)
         self.ctx = ctx
 
     # -------------------------------------------------------------------- API
@@ -309,17 +310,19 @@ class RosterEnv:
             self._feat_day = d
             m = self.minutes
             E[:, self.MINUTES] = np.minimum(m * self.inv_hmax, 1.0)
-            E[:, self.SHORTFALL] = np.maximum(inst.min_minutes - m, 0) * self.inv_hmin
+            E[:, self.SHORTFALL] = np.maximum(self.hmin - m, 0) * self.inv_hmin
             E[:, self.SLACK] = np.clip((inst.max_minutes - m) * self.inv_hmax, -1.0, 1.0)
             E[:, self.RUN_WORK] = np.minimum(self.run_work * self.inv_cmax, 1.0)
             E[:, self.REST] = np.minimum(self.run_off * self.inv_rmin, 1.0)
             E[:, self.PREV:self.PREV + self.S] = self.eye_ext[self.prev]
             G[self.G_DAY] = (d + 1) / self.D
             if self.ext:
-                r = self.run_work
+                r, ab = self.run_work, self.ctx.absent
+                # the run ending at d-1 is exempt from (9) if it starts on day 1 or next to an absence
+                exempt = np.where(r < d, ab[self.rows, np.maximum(d - r - 1, 0)], True) | ab[:, d]
                 E[:, self.EX + self.RUN_DEFICIT] = np.where(
-                    (r > 0) & (r < d), np.maximum(inst.min_consec - r, 0), 0) * self.inv_cmin
-                self._short_day = np.maximum(inst.min_minutes - m, 0)
+                    (r > 0) & ~exempt, np.maximum(inst.min_consec - r, 0), 0) * self.inv_cmin
+                self._short_day = np.maximum(self.hmin - m, 0)
         mask = ~self.assigned
         for c in self.pre:
             mask &= c.delta(self, d, s) == 0
@@ -355,6 +358,6 @@ class RosterEnv:
         G[self.G_ADMISSIBLE] = self.n_allowed / (self.I + 1)
         G[self.G_OVERCOVER] = float(self.f >= self.rho_ds)
         if self.ext:
-            short = float(np.maximum(self.inst.min_minutes - self.minutes, 0).sum())
+            short = float(np.maximum(self.hmin - self.minutes, 0).sum())
             cap = (self.rb - self.k) * float(self.inst.shift_len[self.cs]) + self.cap_after[self.p]
             G[self.GX + self.G_TIGHTNESS] = min(short / (2.0 * max(cap, 1.0)), 1.0)
