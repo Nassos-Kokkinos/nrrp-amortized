@@ -215,7 +215,8 @@ def test_train_script_end_to_end(tmp_path):
     root = Path(__file__).resolve().parents[1]
 
     def run(*args):
-        return subprocess.run([sys.executable, *args], cwd=root, capture_output=True, text=True, timeout=600)
+        return subprocess.run([sys.executable, *args], cwd=root, capture_output=True, text=True, timeout=600,
+                              check=False)
 
     common = ["--name", "t", "--size", "3", "7", "2", "--train-pool", "2", "--eval-pool", "2",
               "--n-steps", "64", "--batch-size", "32", "--n-epochs", "1", "--eval-every", "128",
@@ -390,3 +391,62 @@ def test_rerostering_run_end_to_end(tmp_path):
     assert all(r["vs_cp_hint"] == "" for r in alone)
     out = run("scripts/eval_repair.py", "--name", "t-none", "--runs", str(tmp_path / "runs"))
     assert out.returncode != 0
+
+
+def published_context(n=8, m=14, k=2, seed=3):
+    """A re-rostering context on a synthetic instance, x° = the CP-SAT roster, no absence."""
+    from nrrp.cpsat import solve
+    from nrrp.instance import Context
+    inst = synthetic_instance(n, m, k, seed=seed)
+    res = solve(Context(inst), BURKE_CURTOIS, workers=1, deterministic_limit=30)
+    assert res.has_solution
+    return Context(inst, d_xi=1, published=res.roster, mu=1.0)
+
+
+def test_the_prior_towards_the_published_roster_keeps_the_equivariance():
+    pytest.importorskip("ortools")
+    ctx = published_context()
+    env = GymRosterEnv([ctx.instance], TRAIN, contexts=[ctx], features="extended")
+    pol = make_policy(env, separate_critic=True, features="extended", published_prior=3.0)
+    torch.manual_seed(0)
+    for p in pol.parameters():
+        torch.nn.init.normal_(p, std=0.5)
+    env.reset(seed=1)
+    for _ in range(7):
+        env.step(int(np.flatnonzero(env.action_masks())[0]))
+    obs = env.env.obs.copy()
+    n, d_psi = env.n_emp, pol._d_psi
+    perm = np.random.default_rng(5).permutation(n)
+    rows = obs[: n * d_psi].reshape(n, d_psi)
+    obs_p = np.concatenate([rows[perm].ravel(), obs[n * d_psi:]]).astype(np.float32)
+    with torch.no_grad():
+        lo = pol.mlp_extractor.forward_actor(torch.as_tensor(obs[None])).numpy()[0]
+        lo_p = pol.mlp_extractor.forward_actor(torch.as_tensor(obs_p[None])).numpy()[0]
+    np.testing.assert_allclose(lo_p[:n], lo[:n][perm], rtol=0, atol=1e-5)
+    assert lo_p[n] == pytest.approx(lo[n])
+    assert "mlp_extractor.prior" in dict(pol.named_parameters())     # b is learned
+
+
+def test_with_a_large_prior_the_first_policy_reproduces_the_published_roster():
+    pytest.importorskip("ortools")
+    from nrrp.instance import roster_to_binary
+    ctx = published_context()
+    inst = ctx.instance
+    env = GymRosterEnv([inst], TRAIN, contexts=[ctx], features="extended")
+    pol = make_policy(env, features="extended", published_prior=50.0)
+    obs, _ = env.reset(seed=0)
+    done = False
+    while not done:
+        a, _ = pol.predict(obs, action_masks=env.action_masks(), deterministic=True)
+        obs, _, done, _, _ = env.step(int(a))
+    x, x0 = roster_to_binary(env.roster, inst.n_shifts), roster_to_binary(ctx.published, inst.n_shifts)
+    rho_bar = np.minimum(inst.rho + 1, inst.n_emp)
+    fits = x0.sum(axis=0) <= rho_bar                     # pairs whose x° staffing the slots can hold
+    np.testing.assert_array_equal(x[:, fits], x0[:, fits])
+    without = make_policy(env, features="extended")      # no prior: the near-uniform first policy
+    obs, _ = env.reset(seed=0)
+    done = False
+    while not done:
+        a, _ = without.predict(obs, action_masks=env.action_masks(), deterministic=True)
+        obs, _, done, _, _ = env.step(int(a))
+    assert (roster_to_binary(env.roster, inst.n_shifts) != x0).sum() > (x != x0).sum()

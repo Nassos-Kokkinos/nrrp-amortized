@@ -243,6 +243,10 @@ def main():
     ap.add_argument("--absence-days", type=int, nargs=2, default=[1, 7], metavar=("LO", "HI"),
                     help="P: length of each absence in days, uniform on LO..HI, from d_xi")
     ap.add_argument("--mu", type=float, default=1.0, help="P: weight of the instability Delta(x, x°) in J")
+    ap.add_argument("--published-prior", type=float, default=None, metavar="B0",
+                    help="re-rostering: a learned prior b (initially B0) in the logits towards the employee x° "
+                         "had on the slot, or the empty action if none is allowed (nrrp/policy.py), so that the "
+                         "first policy reproduces x° and training learns where to deviate")
     ap.add_argument("--train-pool", type=int, default=64, help="training instances")
     ap.add_argument("--eval-pool", type=int, default=16, help="held-out instances")
     ap.add_argument("--train-seed0", type=int, default=0, help="first seed tried for the training pool")
@@ -365,6 +369,8 @@ def main():
         eval_ctxs = [Context(inst) for inst in eval_insts]
         print(f"  {len(train_insts)} training, {len(eval_insts)} held-out instances ({time.time() - t0:.0f} s)")
 
+    if args.published_prior is not None and P is None and not (args.resume or args.evaluate_only):
+        sys.exit("--published-prior needs --reroster: in construction there is no x° to follow")
     train_profile = burke_curtois_training(w_min_minutes=args.w_min_minutes,
                                            w_min_consecutive=args.w_min_consecutive)
     if args.resume or args.evaluate_only:      # the encoding the model was trained with
@@ -402,7 +408,8 @@ def main():
             n_epochs=args.n_epochs, gamma=args.gamma, gae_lambda=args.gae_lambda, clip_range=args.clip_range,
             ent_coef=args.ent_coef, vf_coef=args.vf_coef, target_kl=args.target_kl,
             policy_kwargs=dict(n_emp=n, n_shifts=k, hidden=tuple(args.hidden), value_hidden=(args.hidden[-1],),
-                               separate_critic=args.separate_critic, features=args.features),
+                               separate_critic=args.separate_critic, features=args.features,
+                               published_prior=args.published_prior),
             tensorboard_log=str(run / "tb"), seed=args.seed, verbose=0, device="cpu")
         if args.init_from:
             from stable_baselines3.common.save_util import load_from_zip_file
