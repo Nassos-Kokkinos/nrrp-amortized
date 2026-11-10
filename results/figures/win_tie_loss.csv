@@ -1,0 +1,20 @@
+instance,method,budget,wins,ties,losses
+Instance 5,Constructive RL,τ_cp = 0.1 s,0,8,8
+Instance 5,Constructive RL,τ_cp = 0.25 s,0,9,7
+Instance 5,Constructive RL,τ_cp = 0.5 s,1,10,5
+Instance 5,Constructive RL,τ_cp = 1 s,3,12,1
+Instance 5,Constructive RL,τ_cp = 2 s,2,13,1
+Instance 5,Constructive RL,τ_cp = 5 s,1,15,0
+Instance 8,Constructive RL,τ_cp = 0.1 s,2,14,0
+Instance 8,Constructive RL,τ_cp = 0.25 s,3,9,4
+Instance 8,Constructive RL,τ_cp = 0.5 s,2,7,7
+Instance 8,Constructive RL,τ_cp = 1 s,1,9,6
+Instance 8,Constructive RL,τ_cp = 2 s,4,8,4
+Instance 8,Constructive RL,τ_cp = 5 s,2,9,5
+Instance 8,Learned LNS,K = 2 (0.14 s),4,6,6
+Instance 8,Learned LNS,K = 4 (0.28 s),3,4,9
+Instance 8,Learned LNS,K = 8 (0.56 s),0,4,12
+Instance 8,Learned LNS,K = 16 (1.14 s),1,3,12
+Instance 12,Learned LNS,K = 2 (0.71 s),5,4,7
+Instance 12,Learned LNS,K = 4 (1.40 s),1,3,12
+Instance 12,Learned LNS,K = 8 (2.77 s),0,3,13
