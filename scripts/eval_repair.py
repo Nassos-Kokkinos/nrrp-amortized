@@ -25,10 +25,11 @@ with kappa = 1, Eq. (40) as written also frees every pair whose optional
 (rho + 1)-th slot was left empty, about half of all pairs on 25x7, whatever the
 policy (measured 02/11/2026), so the neighbourhood is ~85% of the problem.
 
-Fair baseline (Section 5, Eq. (42)): for every tau_cp > 0, CP-SAT from scratch
-on the full problem with the same wall-clock budget and the same workers;
-per instance, win / tie / loss of policy + repair against it (a CP-SAT run
-with no feasible roster is a loss for CP-SAT if ours is feasible).
+Fair baseline (Eqs. (28), (42)): for every tau_cp > 0, CP-SAT from scratch on
+the full problem with the same total response time as ours on that instance,
+T_infer = T_policy + T_repair (building its model included), and the same
+workers; per instance, win / tie / loss of policy + repair against it (a CP-SAT
+run with no feasible roster is a loss for CP-SAT if ours is feasible).
 --no-cp-scratch skips it.
 
 results/repair/<name>[-best|-random]-anytime[-ek0]/   or   ...-first/  with --first-feasible (committed unless the name starts with provisional-)
@@ -53,7 +54,8 @@ FIELDS = ["instance", "tau_cp", "w0", "anytime", "source", "empty_kappa", "J_cp"
           "J_policy", "feasible_policy", "policy_ms", "J", "feasible", "gap_to_cp", "violations",
           "window", "windows", "statuses", "n_free", "n_vars", "n_ter_employees", "n_empty_pairs",
           "changed_cells", "repair_seconds", "infer_seconds",
-          "J_cp_scratch", "feasible_cp_scratch", "cp_scratch_status", "cp_scratch_seconds", "vs_cp_scratch"]
+          "J_cp_scratch", "feasible_cp_scratch", "cp_scratch_status", "cp_scratch_budget", "cp_scratch_seconds",
+          "vs_cp_scratch"]
 
 
 def main():
@@ -72,7 +74,7 @@ def main():
                     help="kappa used for V^∅ (slots left unfilled): pairs below min(rho + this, n). Default: the "
                          "training kappa, as Eq. (40) is written; 0 = only pairs below rho (genuine under-coverage)")
     ap.add_argument("--no-cp-scratch", action="store_true",
-                    help="skip the fair baseline: CP-SAT from scratch with the same budget tau and workers")
+                    help="skip the fair baseline: CP-SAT from scratch with the same total time T_infer and workers")
     ap.add_argument("--k-samples", type=int, default=8)
     ap.add_argument("--workers", type=int, default=8, help="CP-SAT workers in the repair")
     ap.add_argument("--seed", type=int, default=0)
@@ -85,7 +87,7 @@ def main():
     from sb3_contrib import MaskablePPO
 
     from nrrp.gym_env import GymRosterEnv
-    from nrrp.cpsat import solve
+    from nrrp.cpsat import RosterModel
     from nrrp.instance import Context
     from nrrp.profile import BURKE_CURTOIS, burke_curtois_training
     from nrrp.repair import repair
@@ -152,13 +154,19 @@ def main():
                 extra = {"window": "", "windows": "[]", "statuses": "[]", "n_free": "[]", "n_ter_employees": "",
                          "n_empty_pairs": "", "changed_cells": 0, "repair_seconds": 0.0}
             scratch = {"J_cp_scratch": "", "feasible_cp_scratch": "", "cp_scratch_status": "",
-                       "cp_scratch_seconds": "", "vs_cp_scratch": ""}
+                       "cp_scratch_budget": "", "cp_scratch_seconds": "", "vs_cp_scratch": ""}
             if tau > 0 and not args.no_cp_scratch:
+                # same total response time as ours, T_infer = T_policy + T_repair (Eq. (42)),
+                # building the model included, so that the comparison is the one of (28)
+                target = t_pol + extra["repair_seconds"]
                 t1 = time.perf_counter()
-                cs = solve(ctx, BURKE_CURTOIS, time_limit=tau, workers=args.workers, seed=args.seed)
+                cm = RosterModel(ctx, BURKE_CURTOIS)
+                left = max(target - (time.perf_counter() - t1), 1e-3)
+                cs = cm.solve(time_limit=left, workers=args.workers, seed=args.seed)
                 cs_ok = bool(cs.has_solution and cs.feasible)
                 scratch = {"J_cp_scratch": cs.J if cs_ok else "", "feasible_cp_scratch": cs_ok,
-                           "cp_scratch_status": cs.status, "cp_scratch_seconds": round(time.perf_counter() - t1, 4)}
+                           "cp_scratch_status": cs.status, "cp_scratch_budget": round(target, 4),
+                           "cp_scratch_seconds": round(time.perf_counter() - t1, 4)}
                 if feas and (not cs_ok or J < cs.J - 1e-9):
                     scratch["vs_cp_scratch"] = "win"
                 elif cs_ok and (not feas or J > cs.J + 1e-9):
@@ -195,7 +203,8 @@ def main():
              "feasible": float(np.mean([bool(r["feasible"]) for r in sel])),
              "mean_gap_to_cp": float(np.mean([r["gap_to_cp"] for r in sel])),
              "mean_repair_seconds": float(np.mean([r["repair_seconds"] for r in sel])),
-             "max_repair_seconds": float(np.max([r["repair_seconds"] for r in sel]))}
+             "max_repair_seconds": float(np.max([r["repair_seconds"] for r in sel])),
+             "mean_infer_seconds": float(np.mean([r["infer_seconds"] for r in sel]))}
         reps = [r for r in sel if r["n_free"] not in ("", "[]")]
         s["mean_ter_employees"] = float(np.mean([r["n_ter_employees"] for r in reps])) if reps else None
         s["mean_first_free_share"] = (float(np.mean([json.loads(r["n_free"])[0] / r["n_vars"] for r in reps]))
@@ -213,15 +222,16 @@ def main():
         print(f"{tau:8g} {s['mean_J']:8.1f} {s['feasible']:9.0%} {s['mean_gap_to_cp']:14.1f} "
               f"{s['mean_repair_seconds']:13.3f}s {s['max_repair_seconds']:12.3f}s {ter:>11s} {share:>12s}")
     if any(r["cp_scratch_status"] for r in rows):
-        print(f"\nfair baseline, CP-SAT from scratch with the same tau and {args.workers} workers:")
-        print(f"{'tau_cp':>8s} {'CP feasible':>12s} {'CP mean J':>10s} {'ours, same inst.':>17s} {'win/tie/loss':>13s}   (CP mean J over the instances it solved)")
+        print(f"\nfair baseline, CP-SAT from scratch with the same total time T_infer (policy + repair) and {args.workers} workers:")
+        print(f"{'tau_cp':>8s} {'T_infer':>8s} {'CP feasible':>12s} {'CP mean J':>10s} {'ours, same inst.':>17s} {'win/tie/loss':>13s}   (CP mean J over the instances it solved)")
         for tau in budgets:
             s = summary[str(tau)]
             if "wins" not in s:
                 continue
             cj = "-" if s["cp_scratch_mean_J_solved"] is None else f"{s['cp_scratch_mean_J_solved']:.1f}"
             oj = "-" if s["ours_mean_J_same_instances"] is None else f"{s['ours_mean_J_same_instances']:.1f}"
-            print(f"{tau:8g} {s['cp_scratch_feasible']:12.0%} {cj:>10s} {oj:>17s} {s['wins']:>5d}/{s['ties']}/{s['losses']}")
+            print(f"{tau:8g} {s['mean_infer_seconds']:7.3f}s {s['cp_scratch_feasible']:12.0%} {cj:>10s} {oj:>17s} "
+                  f"{s['wins']:>5d}/{s['ties']}/{s['losses']}")
     (out / "run.json").write_text(json.dumps({
         "training_run": args.name, "steps": model.num_timesteps, "args": {k_: str(v) if isinstance(v, Path) else v
                                                                         for k_, v in vars(args).items()},

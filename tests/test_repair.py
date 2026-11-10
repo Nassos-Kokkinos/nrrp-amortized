@@ -161,6 +161,29 @@ def test_no_budget_returns_the_input():
     np.testing.assert_array_equal(res.roster, x)
 
 
+def test_building_the_subproblem_counts_against_the_budget(monkeypatch):
+    """Eq. (42), T_repair <= tau_cp: a budget spent while building the subproblem leaves
+    nothing for CP-SAT, so no subproblem is solved and the input is returned."""
+    import time
+
+    import nrrp.repair as rep
+
+    class SlowModel(rep.RosterModel):
+        def __init__(self, *a, **kw):
+            time.sleep(0.2)
+            super().__init__(*a, **kw)
+
+    monkeypatch.setattr(rep, "RosterModel", SlowModel)
+    inst = mini()
+    ctx = Context(inst)
+    x = FEASIBLE_ROSTER.copy()
+    x[2, 1] = OFF
+    res = repair(x, ctx, BURKE_CURTOIS, budget=0.1, workers=1)
+    assert res.windows == [] and res.statuses == [] and res.kept_input
+    assert res.seconds < 0.5
+    np.testing.assert_array_equal(res.roster, x)
+
+
 def test_a_roster_breaking_the_history_is_refused():
     inst = mini()
     ctx = Context(inst, d_xi=3, published=FEASIBLE_ROSTER)

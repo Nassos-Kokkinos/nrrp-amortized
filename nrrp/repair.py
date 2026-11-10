@@ -173,6 +173,9 @@ def repair(roster: np.ndarray, ctx: Context, profile, *, w0: int = 1, budget: fl
             break
         free = neighbourhood(roster, ctx, profile, w, kappa)
         model = RosterModel(ctx, profile, free=free, base=roster)
+        remaining = budget - (time.perf_counter() - t0)      # building the subproblem is part of tau_cp (42)
+        if remaining <= 0:
+            break
         sol = model.solve(time_limit=remaining, workers=workers, seed=seed,
                           hint=res.roster if res.window is not None else roster,
                           deterministic_limit=det_left)

@@ -296,6 +296,9 @@ def test_train_script_end_to_end(tmp_path):
         assert all(r["vs_cp_scratch"] in ("win", "tie", "loss") for r in repaired)
         assert all(r["vs_cp_scratch"] == "" and r["cp_scratch_status"] == "" for r in alone)
         assert "fair baseline" in out.stdout
+        for r in repaired:          # CP-SAT gets our total response time T_policy + T_repair, Eq. (42)
+            assert float(r["cp_scratch_budget"]) == pytest.approx(
+                float(r["policy_ms"]) / 1000 + float(r["repair_seconds"]), abs=1e-3)
 
 
 def test_ctrl_c_stops_pool_building(tmp_path):
