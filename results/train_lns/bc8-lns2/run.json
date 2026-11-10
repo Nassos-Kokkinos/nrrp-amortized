@@ -1,0 +1,87 @@
+{
+  "args": {
+    "name": "bc8-lns2",
+    "pools_from": "bc8-big-p5",
+    "reroster": null,
+    "published": null,
+    "n_absent": [
+      3,
+      5
+    ],
+    "absence_days": [
+      3,
+      7
+    ],
+    "mu": 1.0,
+    "eval_pool": 16,
+    "eval_seed0": 100000,
+    "cp_time_limit": 60.0,
+    "val_pool": 16,
+    "val_seed0": 200000,
+    "steps": 8,
+    "step_time": 0.1,
+    "cp_workers": 1,
+    "release": "both",
+    "n_envs": 8,
+    "timesteps": 50000,
+    "eval_every": 5000,
+    "n_steps": 64,
+    "batch_size": 64,
+    "n_epochs": 10,
+    "lr": 0.0003,
+    "ent_coef": 0.0,
+    "gamma": 1.0,
+    "gae_lambda": 0.95,
+    "hidden": [
+      64,
+      64
+    ],
+    "init_bias": -2.0,
+    "seed": 0,
+    "resume": false,
+    "runs": "runs",
+    "results": "results/train_lns"
+  },
+  "machine": {
+    "platform": "macOS-26.3-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "cpu_count": 10,
+    "python": "3.14.10",
+    "numpy": "2.5.4",
+    "torch": "2.15.0",
+    "gymnasium": "1.4.0",
+    "stable_baselines3": "2.9.2",
+    "sb3_contrib": "2.9.2",
+    "ortools": "9.15.6755"
+  },
+  "disruption": {
+    "instance": "Instance8",
+    "n_absent": [
+      3,
+      5
+    ],
+    "days": [
+      3,
+      7
+    ],
+    "mu": 1.0,
+    "first_day": 1
+  },
+  "env": {
+    "steps": 8,
+    "step_time": 0.1,
+    "workers": 1,
+    "release": "both"
+  },
+  "started": "2026-11-10 23:17:34 +0200",
+  "steps": 50176,
+  "best_steps": 40000,
+  "finished": "2026-11-10 23:34:21 +0200",
+  "summary": {
+    "J_start": 2544.4375,
+    "J": 2386.5,
+    "feasible": 1.0,
+    "J_cp": 2250.875,
+    "seconds": 0.5885
+  }
+}
