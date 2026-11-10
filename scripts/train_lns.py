@@ -34,9 +34,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from train import best_published, disruption_model, feasible_contexts, pool_contexts, versions  # noqa: E402
 
 PROGRESS_FIELDS = ["steps", "wall_seconds", "J_start", "J_det", "feasible_det", "J_cp", "J_val", "feasible_val",
-                   "best", "released_per_step"]
+                   "best", "released_per_step", "days_per_step"]
 RESULT_FIELDS = ["context", "d_xi", "J_cp", "cp_status", "J_start", "feasible_start", "J", "feasible", "changes",
-                 "seconds", "released_per_step", "statuses"]
+                 "seconds", "released_per_step", "days_per_step", "statuses"]
 
 
 def make_env(spec, env_kwargs, seed):
@@ -52,12 +52,12 @@ def make_env(spec, env_kwargs, seed):
 def policy_chooser(model):
     import torch
 
-    from nrrp.lns_env import top_q
+    from nrrp.lns_env import decide
 
     def choose(obs, env):
         with torch.no_grad():
             logits = model.policy.mlp_extractor.forward_actor(torch.as_tensor(obs[None])).numpy()[0]
-        return top_q(logits)
+        return decide(logits, env)
     return choose
 
 
@@ -71,6 +71,7 @@ def evaluate(model, env, n):
         rows.append({"J_start": info["J0"], "feasible_start": info["feasible0"], "J": info["J"],
                      "feasible": info["feasible"], "changes": info["changes"], "seconds": round(info["seconds"], 4),
                      "released_per_step": float(np.mean(info["freed_per_step"])),
+                     "days_per_step": float(np.mean(info["days_per_step"])),
                      "statuses": json.dumps(info["statuses"])})
     return rows
 
@@ -92,6 +93,9 @@ def main():
     ap.add_argument("--steps", type=int, default=8, help="LNS steps (CP-SAT calls) per episode, K")
     ap.add_argument("--step-time", type=float, default=0.05, help="CP-SAT seconds per step, model building included")
     ap.add_argument("--cp-workers", type=int, default=1, help="CP-SAT workers per environment")
+    ap.add_argument("--release", choices=["employees", "both"], default="employees",
+                    help="what the policy releases for CP-SAT: employees (all their days from d_xi), or both "
+                         "employees and days (all employees on a day)")
     ap.add_argument("--n-envs", type=int, default=8, help="parallel training environments")
     ap.add_argument("--timesteps", type=int, default=50_000, help="total LNS steps (cumulative on --resume)")
     ap.add_argument("--eval-every", type=int, default=5_000)
@@ -157,7 +161,7 @@ def main():
     inst, n = P.instance, P.instance.n_emp
     eval_ctxs = pool_contexts(pools)
     val_ctxs = [P.context(args.val_seed0 + j) for j in range(args.val_pool)]
-    env_kwargs = dict(steps=args.steps, step_time=args.step_time, workers=args.cp_workers)
+    env_kwargs = dict(steps=args.steps, step_time=args.step_time, workers=args.cp_workers, release=args.release)
     print(f"learned LNS on {inst.name} ({n}x{inst.n_days}x{inst.n_shifts}); P {P.describe()}; "
           f"K = {args.steps} steps of {args.step_time:g} s; {args.n_envs} environments", flush=True)
 
@@ -176,7 +180,8 @@ def main():
     else:
         model = PPO(LNSPolicy, venv, learning_rate=args.lr, n_steps=args.n_steps, batch_size=args.batch_size,
                     n_epochs=args.n_epochs, gamma=args.gamma, gae_lambda=args.gae_lambda, ent_coef=args.ent_coef,
-                    policy_kwargs=dict(n_emp=n, hidden=tuple(args.hidden), init_bias=args.init_bias),
+                    policy_kwargs=dict(n_emp=n, n_days=inst.n_days if args.release == "both" else 0,
+                                       hidden=tuple(args.hidden), init_bias=args.init_bias),
                     tensorboard_log=str(run / "tb"), seed=args.seed, verbose=0, device="cpu")
     progress = run / "progress.csv"
     J_cp = float(np.mean([r["J_cp"] for r in pools["eval"]]))
@@ -185,7 +190,8 @@ def main():
         rows = evaluate(model, eval_env, len(eval_ctxs))
         s = {"J_start": float(np.mean([r["J_start"] for r in rows])), "J_det": float(np.mean([r["J"] for r in rows])),
              "feasible_det": float(np.mean([r["feasible"] for r in rows])),
-             "released": float(np.mean([r["released_per_step"] for r in rows]))}
+             "released": float(np.mean([r["released_per_step"] for r in rows])),
+             "days": float(np.mean([r["days_per_step"] for r in rows]))}
         better, J_val, f_val = False, "", ""
         if val_env is not None:
             vals = evaluate(model, val_env, len(val_ctxs))
@@ -203,9 +209,10 @@ def main():
                 w.writeheader()
             w.writerow({"steps": steps, "wall_seconds": round(wall, 1), "J_start": s["J_start"], "J_det": s["J_det"],
                         "feasible_det": s["feasible_det"], "J_cp": J_cp, "J_val": J_val, "feasible_val": f_val,
-                        "best": better, "released_per_step": s["released"]})
+                        "best": better, "released_per_step": s["released"], "days_per_step": s["days"]})
         print(f"  {steps:>8,d} steps {wall:7.0f} s   held-out J: start {s['J_start']:8.1f}  learned LNS {s['J_det']:8.1f} "
-              f"(feasible {s['feasible_det']:.0%}, {s['released']:.1f} released/step)  CP-SAT {J_cp:7.1f}"
+              f"(feasible {s['feasible_det']:.0%}, {s['released']:.1f} employees"
+              + (f" + {s['days']:.1f} days" if args.release == "both" else "") + f" released/step)  CP-SAT {J_cp:7.1f}"
               + (f"   validation {J_val:8.1f}{'  <- best, saved' if better else ''}" if val_env is not None else ""),
               flush=True)
 

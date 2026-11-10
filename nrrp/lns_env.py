@@ -26,6 +26,13 @@ roster, never break a constraint that x_t meets.
 Observation: one row per employee (FEATURES) and a global vector (GLOBAL),
 clipped to [-1, 1]; the policy (nrrp.policy.LNSPolicy) is the same shared
 per-employee MLP as Eq. (39), so it is equivariant in the employees.
+
+``release="both"`` (run 2, 10/11/2026): the action also selects days, {0, 1}^(n+m);
+a selected day d >= d_xi is freed for every employee, so the window of
+Algorithm 1 (all employees, days d_xi..d_xi+w) is one of the neighbourhoods the
+policy can choose. One row of DAY_FEATURES per day joins the observation, and a
+second shared MLP scores the days. Releasing only employees (run 1) could not
+reshuffle the cover of a day, as the other employees stayed fixed.
 """
 from __future__ import annotations
 
@@ -47,13 +54,18 @@ class LNSEnv(gym.Env):
     FEATURES = ("absent", "requests", "can_help", "can_leave", "changes", "slack", "shortfall",
                 "violates", "chosen_last", "chosen_share")
     GLOBAL = ("progress", "day", "under_cover", "improvement", "absent_share")
+    DAY_FEATURES = ("before_xi", "distance", "under_cover", "over_cover", "absent", "requests", "changes",
+                    "chosen_last", "chosen_share")
+    (D_BEFORE, D_DISTANCE, D_UNDER, D_OVER, D_ABSENT, D_REQUESTS, D_CHANGES,
+     D_CHOSEN_LAST, D_CHOSEN_SHARE) = range(9)
+    RELEASE = ("employees", "both")
     (ABSENT, REQUESTS, CAN_HELP, CAN_LEAVE, CHANGES, SLACK, SHORTFALL,
      VIOLATES, CHOSEN_LAST, CHOSEN_SHARE) = range(10)
     G_PROGRESS, G_DAY, G_UNDER, G_IMPROVEMENT, G_ABSENT = range(5)
 
     def __init__(self, contexts, profile=BURKE_CURTOIS, *, steps: int = 8, step_time: float = 0.05,
                  workers: int = 1, seed: int = 0, violation_weight: float = 1000.0,
-                 deterministic_time: float | None = None):
+                 deterministic_time: float | None = None, release: str = "employees"):
         """``contexts``: a DisruptionModel (a fresh context every episode) or a list of
         Contexts of one instance (fixed; ``reset(options={"instance": j})`` picks one).
         ``step_time``: CP-SAT wall-clock seconds per step; ``deterministic_time`` replaces
@@ -70,13 +82,19 @@ class LNSEnv(gym.Env):
                 raise ValueError("all contexts must be of one instance")
         if steps < 1:
             raise ValueError("steps must be >= 1")
+        if release not in self.RELEASE:
+            raise ValueError(f"release must be one of {self.RELEASE}")
+        self.release = release
         self.inst, self.profile = inst, profile
         self.K, self.step_time, self.workers, self.seed_cp = int(steps), float(step_time), int(workers), int(seed)
         self.violation_weight, self.det_time = float(violation_weight), deterministic_time
         n = inst.n_emp
         self.n_emp, self.FE, self.FG = n, len(self.FEATURES), len(self.GLOBAL)
-        self.observation_space = gym.spaces.Box(-1.0, 1.0, shape=(n * self.FE + self.FG,), dtype=np.float32)
-        self.action_space = gym.spaces.MultiBinary(n)
+        self.n_days_released = inst.n_days if release == "both" else 0       # days in the action
+        self.FD = len(self.DAY_FEATURES) if release == "both" else 0
+        size = n * self.FE + self.n_days_released * self.FD + self.FG
+        self.observation_space = gym.spaces.Box(-1.0, 1.0, shape=(size,), dtype=np.float32)
+        self.action_space = gym.spaces.MultiBinary(n + self.n_days_released)
         self.w_req = max(float(inst.on_req.max()), float(inst.off_req.max()), 1.0)
         self.w_cov = max(float(inst.w_under.max()), 1.0)
         self.ctx = None
@@ -126,7 +144,21 @@ class LNSEnv(gym.Env):
         G[self.G_UNDER] = under.sum() / (self.w_cov * n)
         G[self.G_IMPROVEMENT] = (self.phi0 - self.phi) / max(abs(self.phi0), 1.0)
         G[self.G_ABSENT] = ctx.absent.any(axis=1).mean()
-        return np.clip(np.concatenate([E.ravel(), G]), -1.0, 1.0).astype(np.float32)
+        parts = [E.ravel()]
+        if self.FD:                                   # one row per day
+            F = np.zeros((D, self.FD), np.float64)
+            F[:, self.D_BEFORE] = ~after
+            F[:, self.D_DISTANCE] = np.where(after, (np.arange(D) - d0) / D, -1.0)
+            F[:, self.D_UNDER] = under.sum(axis=1) / (self.w_cov * S)
+            F[:, self.D_OVER] = over.sum(axis=1) / (self.w_cov * S)
+            F[:, self.D_ABSENT] = ctx.absent.sum(axis=0) / n
+            F[:, self.D_REQUESTS] = (inst.on_req * ~xb + inst.off_req * xb).sum(axis=(0, 2)) * after / (self.w_req * n)
+            F[:, self.D_CHANGES] = (xb != roster_to_binary(ctx.published, S)).sum(axis=(0, 2)) / n
+            F[:, self.D_CHOSEN_LAST] = self.day_last
+            F[:, self.D_CHOSEN_SHARE] = self.day_count / self.K
+            parts.append(F.ravel())
+        parts.append(G)
+        return np.clip(np.concatenate(parts), -1.0, 1.0).astype(np.float32)
 
     # --------------------------------------------------------------------- API
     def reset(self, *, seed: int | None = None, options: dict | None = None):
@@ -141,18 +173,24 @@ class LNSEnv(gym.Env):
         self.phi0, self.J0, self.feasible0, _ = self.potential(self.x)
         self.phi, self.J, self.feasible = self.phi0, self.J0, self.feasible0
         self.t, self.last, self.count = 0, np.zeros(self.n_emp), np.zeros(self.n_emp)
-        self.cp_seconds, self.statuses, self.freed = 0.0, [], []
+        self.day_last, self.day_count = np.zeros(self.inst.n_days), np.zeros(self.inst.n_days)
+        self.cp_seconds, self.statuses, self.freed, self.days_freed = 0.0, [], [], []
         return self._observe(), {"context": self.ctx.name, "J": self.J, "feasible": self.feasible}
 
     def step(self, action):
-        a = np.asarray(action, dtype=bool).reshape(self.n_emp)
+        act = np.asarray(action, dtype=bool).reshape(self.n_emp + self.n_days_released)
+        a, days = act[: self.n_emp], np.zeros(self.inst.n_days, bool)
+        if self.n_days_released:
+            days = act[self.n_emp:].copy()
+            days[: self.ctx.d_xi] = False                                   # the history stays fixed
         rows = a | self.violators(self.x)
         phi_before = self.phi
         t0 = time.perf_counter()
         status = "SKIPPED"
-        if rows.any():
+        if rows.any() or days.any():
             free = np.zeros((self.n_emp, self.inst.n_days), bool)
             free[rows, self.ctx.d_xi:] = True
+            free[:, days] = True
             model = RosterModel(self.ctx, self.profile, free=free, base=self.x)
             left = self.step_time - (time.perf_counter() - t0)      # building counts against the step
             if left > 0 or self.det_time is not None:
@@ -167,14 +205,18 @@ class LNSEnv(gym.Env):
         self.cp_seconds += time.perf_counter() - t0
         self.statuses.append(status)
         self.freed.append(int(rows.sum()))
+        self.days_freed.append(int(days.sum()))
         self.last, self.count = a.astype(float), self.count + a
+        self.day_last, self.day_count = days.astype(float), self.day_count + days
         self.t += 1
         done = self.t >= self.K
         reward = (phi_before - self.phi) / max(abs(self.phi0), 1.0)    # >= 0, telescopes to Phi(x_0) - Phi(x_K)
-        info = {"J": self.J, "feasible": self.feasible, "status": status, "freed": int(rows.sum())}
+        info = {"J": self.J, "feasible": self.feasible, "status": status, "freed": int(rows.sum()),
+                "days_freed": int(days.sum())}
         if done:
             info.update({"J0": self.J0, "feasible0": self.feasible0, "changes": changes(self.x, self.ctx),
-                         "cp_seconds": self.cp_seconds, "statuses": list(self.statuses), "freed_per_step": list(self.freed)})
+                         "cp_seconds": self.cp_seconds, "statuses": list(self.statuses), "freed_per_step": list(self.freed),
+                         "days_per_step": list(self.days_freed)})
         return self._observe(), float(reward), done, False, info
 
     @property
@@ -191,6 +233,32 @@ def top_q(logits: np.ndarray) -> np.ndarray:
     q = max(1, int(round(float((1.0 / (1.0 + np.exp(-logits))).sum()))))
     a = np.zeros(len(logits), np.int8)
     a[np.argsort(-logits, kind="stable")[:q]] = 1
+    return a
+
+
+def decide(logits: np.ndarray, env: LNSEnv) -> np.ndarray:
+    """The deterministic action of a policy on ``env``: top_q over the employees and, with
+    release="both", top_q over the days d >= d_xi (the earlier days cannot be released)."""
+    logits = np.asarray(logits, dtype=float)
+    n = env.n_emp
+    a = top_q(logits[:n])
+    if env.n_days_released:
+        days = logits[n:].copy()
+        days[: env.ctx.d_xi] = -np.inf
+        a = np.concatenate([a, top_q(days)])
+    return a
+
+
+def random_action(env: LNSEnv, q: int, q_days: int, rng: np.random.Generator) -> np.ndarray:
+    """The random-LNS baseline: q employees and, with release="both", q_days days d >= d_xi,
+    uniformly at random."""
+    a = random_q(env.n_emp, q, rng) if q > 0 else np.zeros(env.n_emp, np.int8)
+    if env.n_days_released:
+        days = np.zeros(env.inst.n_days, np.int8)
+        later = np.arange(env.ctx.d_xi, env.inst.n_days)
+        if q_days > 0:
+            days[rng.choice(later, size=min(q_days, len(later)), replace=False)] = 1
+        a = np.concatenate([a, days])
     return a
 
 

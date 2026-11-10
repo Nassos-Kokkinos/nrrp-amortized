@@ -8,8 +8,9 @@ For every held-out context of runs/<name>/pools.json and every K in --steps-list
 * learned LNS: K steps of the policy of runs/<name>/best.zip (or latest.zip with
   --checkpoint latest), each releasing the q employees with the highest log-odds;
   its wall-clock time T, the policy's decisions included, is the budget of the rest;
-* random LNS: K steps of --step-time, each releasing as many employees as the
-  learned policy did on average on that context, chosen uniformly at random
+* random LNS: K steps of --step-time, each releasing as many employees (and days,
+  with release="both") as the learned policy did on average on that context,
+  chosen uniformly at random
   (does the policy add anything beyond LNS itself?);
 * repair of x°: Algorithm 1 on x° without the absent employees' assignments, budget T;
 * CP-SAT on (20) from scratch, and hinted with x°, total time T (model building included).
@@ -55,7 +56,7 @@ def main():
 
     from nrrp.cpsat import RosterModel
     from nrrp.disruption import changes, without_absences
-    from nrrp.lns_env import LNSEnv, random_q, run_episode, top_q
+    from nrrp.lns_env import LNSEnv, decide, random_action, run_episode
     from nrrp.profile import BURKE_CURTOIS
     from nrrp.repair import repair
 
@@ -74,7 +75,7 @@ def main():
     def learned(obs, env):
         with torch.no_grad():
             logits = model.policy.mlp_extractor.forward_actor(torch.as_tensor(obs[None])).numpy()[0]
-        return top_q(logits)
+        return decide(logits, env)
 
     def cp(ctx, budget, hint=None):
         t1 = time.perf_counter()
@@ -90,16 +91,18 @@ def main():
     print(f"{len(ctxs)} held-out contexts of {ctxs[0].instance.name}; K {args.steps_list}, {step_time:g} s per step, "
           f"{args.workers} CP-SAT workers; checkpoint {ckpt.name}", flush=True)
     for K in args.steps_list:
-        env = LNSEnv(ctxs, steps=K, step_time=step_time, workers=args.workers, seed=args.seed)
+        env = LNSEnv(ctxs, steps=K, step_time=step_time, workers=args.workers, seed=args.seed,
+                     release=config["env"].get("release", "employees"))
         for j, (ctx, rec) in enumerate(zip(ctxs, pools["eval"])):
             base = {"context": ctx.name, "d_xi": ctx.d_xi, "J_cp_ref": rec["J_cp"], "K": K}
             x, info = run_episode(env, j, learned)
             T = info["seconds"]
-            q = max(1, int(round(np.mean([f for f in info["freed_per_step"]]))))
+            q = int(round(np.mean(info["freed_per_step"])))
+            q_days = int(round(np.mean(info["days_per_step"])))
             rows.append({**base, "method": "learned_lns", "J": info["J"], "feasible": info["feasible"],
                          "changes": info["changes"], "seconds": round(T, 4), "budget": round(T, 4),
                          "released": float(np.mean(info["freed_per_step"]))})
-            x, info = run_episode(env, j, lambda obs, e: random_q(e.n_emp, q, rng))
+            x, info = run_episode(env, j, lambda obs, e: random_action(e, q, q_days, rng))
             rows.append({**base, "method": "random_lns", "J": info["J"], "feasible": info["feasible"],
                          "changes": info["changes"], "seconds": round(info["seconds"], 4), "budget": round(T, 4),
                          "released": float(np.mean(info["freed_per_step"]))})

@@ -10,7 +10,7 @@ from nrrp.cpsat import solve  # noqa: E402
 from nrrp.disruption import DisruptionModel  # noqa: E402
 from nrrp.generator import synthetic_instance  # noqa: E402
 from nrrp.instance import OFF, Context  # noqa: E402
-from nrrp.lns_env import LNSEnv, random_q, run_episode, top_q  # noqa: E402
+from nrrp.lns_env import LNSEnv, decide, random_action, random_q, run_episode, top_q  # noqa: E402
 from nrrp.profile import BURKE_CURTOIS  # noqa: E402
 
 DET = dict(steps=4, workers=1, deterministic_time=2.0)          # reproducible CP-SAT steps
@@ -87,7 +87,8 @@ def test_the_policy_is_equivariant_and_starts_releasing_few(model_P):
         lo, v = ext(torch.as_tensor(obs[None]))
         lo_p, v_p = ext(torch.as_tensor(obs_p[None]))
     np.testing.assert_allclose(lo_p.numpy()[0], lo.numpy()[0][perm], atol=1e-5)
-    assert float(model.policy.value_net(v_p)) == pytest.approx(float(model.policy.value_net(v)), abs=1e-5)
+    with torch.no_grad():
+        assert float(model.policy.value_net(v_p)) == pytest.approx(float(model.policy.value_net(v)), abs=1e-5)
     model.learn(total_timesteps=16)                                                # PPO runs on the MultiBinary action
 
 
@@ -97,7 +98,60 @@ def test_run_episode_reports_the_time(model_P):
     assert info["seconds"] > 0 and len(info["freed_per_step"]) == DET["steps"]
 
 
-def test_lns_scripts_end_to_end(tmp_path, model_P):
+def test_releasing_days_frees_every_employee_on_them(model_P):
+    """release="both": a released day d >= d_xi frees all employees on d; earlier days are ignored."""
+    ctxs = [model_P.context(s) for s in range(10)]
+    env = LNSEnv(ctxs, release="both", **DET)
+    n, m = env.n_emp, env.inst.n_days
+    assert env.action_space.n == n + m
+    assert env.observation_space.shape == (n * env.FE + m * env.FD + env.FG,)
+    j = next(k for k, c in enumerate(ctxs) if c.d_xi < m - 3)        # room for three days after d_xi
+    obs, _ = env.reset(options={"instance": j})
+    d0 = env.ctx.d_xi
+    a = np.zeros(n + m, np.int8)
+    a[n + d0 - 1] = 1                                              # a day of the history: ignored
+    _, _, _, _, info = env.step(a)
+    assert info["days_freed"] == 0
+    a[n + d0] = 1                                                   # the first day that may change
+    obs, r, _, _, info = env.step(a)
+    assert info["days_freed"] == 1 and info["status"] != "SKIPPED" and r >= 0
+    assert env.observation_space.contains(obs)
+    logits = np.full(n + m, -9.0)
+    logits[n: n + d0] = 9.0                                         # the policy prefers history days ...
+    d = decide(logits, env)
+    assert d[n: n + d0].sum() == 0 and d[n + d0:].sum() == 1        # ... decide never releases them
+    r_a = random_action(env, 2, 3, np.random.default_rng(0))
+    assert r_a[:n].sum() == 2 and r_a[n + d0:].sum() == 3 and r_a[n: n + d0].sum() == 0
+
+
+def test_the_policy_scores_days_too(model_P):
+    from stable_baselines3 import PPO
+
+    from nrrp.policy import LNSPolicy
+    env = LNSEnv(model_P, release="both", **DET)
+    n, m = env.n_emp, env.inst.n_days
+    model = PPO(LNSPolicy, env, n_steps=8, batch_size=8, n_epochs=1, device="cpu", seed=0,
+                policy_kwargs=dict(n_emp=n, n_days=m))
+    torch.manual_seed(0)
+    for p in model.policy.parameters():
+        torch.nn.init.normal_(p, std=0.5)
+    obs, _ = env.reset(seed=3)
+    d = env.FE
+    perm = np.random.default_rng(4).permutation(n)
+    rows = obs[: n * d].reshape(n, d)
+    obs_p = np.concatenate([rows[perm].ravel(), obs[n * d:]]).astype(np.float32)
+    ext = model.policy.mlp_extractor
+    with torch.no_grad():
+        lo = ext.forward_actor(torch.as_tensor(obs[None])).numpy()[0]
+        lo_p = ext.forward_actor(torch.as_tensor(obs_p[None])).numpy()[0]
+    assert lo.shape == (n + m,)
+    np.testing.assert_allclose(lo_p[:n], lo[:n][perm], atol=1e-5)         # employees permute
+    np.testing.assert_allclose(lo_p[n:], lo[n:], atol=1e-5)               # days do not move
+    model.learn(total_timesteps=16)
+
+
+@pytest.mark.parametrize("release", ["employees", "both"])
+def test_lns_scripts_end_to_end(tmp_path, model_P, release):
     import csv
     import json
     import subprocess
@@ -119,7 +173,8 @@ def test_lns_scripts_end_to_end(tmp_path, model_P):
               "--n-absent", "1", "2", "--absence-days", "2", "4", "--eval-pool", "2", "--val-pool", "2",
               "--cp-time-limit", "5", "--steps", "2", "--step-time", "0.05", "--n-envs", "2",
               "--timesteps", "64", "--n-steps", "16", "--batch-size", "16", "--n-epochs", "1", "--eval-every", "32",
-              "--hidden", "16", "16", "--runs", str(tmp_path / "runs"), "--results", str(tmp_path / "results"))
+              "--hidden", "16", "16", "--release", release,
+              "--runs", str(tmp_path / "runs"), "--results", str(tmp_path / "results"))
     assert out.returncode == 0, out.stdout + out.stderr
     for f in ("pools.json", "config.json", "latest.zip", "best.zip", "best.json", "progress.csv"):
         assert (tmp_path / "runs" / "lns" / f).exists(), f

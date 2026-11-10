@@ -198,75 +198,106 @@ def transfer_state(policy: EmployeePolicy, state: dict) -> list:
 # ------------------------------------------------------------------ learned LNS (nrrp/lns_env.py)
 
 class LNSExtractor(nn.Module):
-    """Per-employee scores for the release decision of the learned LNS:
+    """Scores for the release decision of the learned LNS:
 
         h_i     = MLP([e_i, g])        one MLP shared by all employees (as Eq. (39))
         logit_i = w^T h_i + b          log-odds of releasing employee i for CP-SAT
-        V       = MLP_v(mean_i h'_i)   value from a separate encoder
+        u_d     = MLP_day([f_d, g])    with n_days > 0 (release="both"): one MLP shared by the days
+        logit_d = w'^T u_d + b'        log-odds of releasing day d for every employee
+        V       = MLP_v([mean_i h'_i, mean_d u'_d])   value from separate encoders
 
-    equivariant in the employees, with no parameter that depends on n. The bias b
-    starts at ``init_bias`` (-2: about one employee in eight released per step)."""
+    equivariant in the employees, with no parameter that depends on n. The biases b, b'
+    start at ``init_bias`` (-2: about one employee, or day, in eight per step)."""
 
     def __init__(self, n_emp: int, d_e: int, d_g: int, hidden=(64, 64), value_hidden=(64,),
-                 activation=nn.Tanh, init_bias: float = -2.0):
+                 activation=nn.Tanh, init_bias: float = -2.0, n_days: int = 0, d_day: int = 0):
         super().__init__()
         self.n, self.d_e, self.d_g, self.init_bias = int(n_emp), int(d_e), int(d_g), float(init_bias)
+        self.m, self.d_day = int(n_days), int(d_day)
         self.encoder = _mlp([d_e + d_g, *hidden], activation)
         self.critic_encoder = _mlp([d_e + d_g, *hidden], activation)
         self.score = nn.Linear(hidden[-1], 1)
-        self.value_body = _mlp([hidden[-1], *value_hidden], activation) if value_hidden else nn.Identity()
-        self.latent_dim_pi = self.n
-        self.latent_dim_vf = value_hidden[-1] if value_hidden else hidden[-1]
+        width = hidden[-1]
+        if self.m:
+            self.day_encoder = _mlp([d_day + d_g, *hidden], activation)
+            self.day_critic_encoder = _mlp([d_day + d_g, *hidden], activation)
+            self.day_score = nn.Linear(hidden[-1], 1)
+            width = 2 * hidden[-1]
+        self.value_body = _mlp([width, *value_hidden], activation) if value_hidden else nn.Identity()
+        self.latent_dim_pi = self.n + self.m
+        self.latent_dim_vf = value_hidden[-1] if value_hidden else width
 
-    def inputs(self, obs: torch.Tensor) -> torch.Tensor:
-        b = obs.shape[0]
-        rows = obs[:, : self.n * self.d_e].reshape(b, self.n, self.d_e)
-        g = obs[:, self.n * self.d_e:]
-        return torch.cat([rows, g.unsqueeze(1).expand(-1, self.n, -1)], dim=-1)
+    def inputs(self, obs: torch.Tensor):
+        b, ne = obs.shape[0], self.n * self.d_e
+        nd = self.m * self.d_day
+        g = obs[:, ne + nd:]
+        rows = torch.cat([obs[:, :ne].reshape(b, self.n, self.d_e), g.unsqueeze(1).expand(-1, self.n, -1)], dim=-1)
+        if not self.m:
+            return rows, None
+        days = obs[:, ne: ne + nd].reshape(b, self.m, self.d_day)
+        return rows, torch.cat([days, g.unsqueeze(1).expand(-1, self.m, -1)], dim=-1)
+
+    def _actor(self, rows, days):
+        logits = self.score(self.encoder(rows)).squeeze(-1)                     # (batch, n)
+        if days is not None:
+            logits = torch.cat([logits, self.day_score(self.day_encoder(days)).squeeze(-1)], dim=1)
+        return logits
+
+    def _critic(self, rows, days):
+        z = self.critic_encoder(rows).mean(dim=1)
+        if days is not None:
+            z = torch.cat([z, self.day_critic_encoder(days).mean(dim=1)], dim=1)
+        return self.value_body(z)
 
     def forward_actor(self, obs: torch.Tensor) -> torch.Tensor:
-        return self.score(self.encoder(self.inputs(obs))).squeeze(-1)          # (batch, n) log-odds
+        return self._actor(*self.inputs(obs))                                  # (batch, n [+ m]) log-odds
 
     def forward_critic(self, obs: torch.Tensor) -> torch.Tensor:
-        return self.value_body(self.critic_encoder(self.inputs(obs)).mean(dim=1))
+        return self._critic(*self.inputs(obs))
 
     def forward(self, obs: torch.Tensor):
-        x = self.inputs(obs)
-        return self.score(self.encoder(x)).squeeze(-1), self.value_body(self.critic_encoder(x).mean(dim=1))
+        rows, days = self.inputs(obs)
+        return self._actor(rows, days), self._critic(rows, days)
 
 
 class LNSPolicy(ActorCriticPolicy):
     """PPO policy for :class:`nrrp.lns_env.LNSEnv`: a MultiBinary action, one Bernoulli per
-    employee, with the logits of :class:`LNSExtractor`. policy_kwargs: ``n_emp``, and
-    optionally ``hidden``, ``value_hidden``, ``init_bias``."""
+    employee (and per day, with ``n_days`` > 0, i.e. release="both"), with the logits of
+    :class:`LNSExtractor`. policy_kwargs: ``n_emp``, and optionally ``n_days``, ``hidden``,
+    ``value_hidden``, ``init_bias``."""
 
-    def __init__(self, observation_space, action_space, lr_schedule, *, n_emp: int,
+    def __init__(self, observation_space, action_space, lr_schedule, *, n_emp: int, n_days: int = 0,
                  hidden=(64, 64), value_hidden=(64,), init_bias: float = -2.0,
                  activation_fn=nn.Tanh, **kwargs):
         from .lns_env import LNSEnv
-        self._n_emp, self._hidden, self._value_hidden = int(n_emp), tuple(hidden), tuple(value_hidden)
+        self._n_emp, self._n_days = int(n_emp), int(n_days)
+        self._hidden, self._value_hidden = tuple(hidden), tuple(value_hidden)
         self._init_bias = float(init_bias)
         self._d_e, self._d_g = len(LNSEnv.FEATURES), len(LNSEnv.GLOBAL)
-        want = self._n_emp * self._d_e + self._d_g
+        self._d_day = len(LNSEnv.DAY_FEATURES) if self._n_days else 0
+        want = self._n_emp * self._d_e + self._n_days * self._d_day + self._d_g
         if observation_space.shape != (want,):
-            raise ValueError(f"observation of shape {observation_space.shape}, expected ({want},) for {n_emp} employees")
-        if action_space.n != self._n_emp:
-            raise ValueError(f"{action_space.n} binary actions, expected {self._n_emp}")
+            raise ValueError(f"observation of shape {observation_space.shape}, expected ({want},) for "
+                             f"{n_emp} employees and {n_days} days")
+        if action_space.n != self._n_emp + self._n_days:
+            raise ValueError(f"{action_space.n} binary actions, expected {self._n_emp + self._n_days}")
         super().__init__(observation_space, action_space, lr_schedule, activation_fn=activation_fn, **kwargs)
 
     def _build_mlp_extractor(self) -> None:
         self.mlp_extractor = LNSExtractor(self._n_emp, self._d_e, self._d_g, self._hidden, self._value_hidden,
-                                          self.activation_fn, self._init_bias)
+                                          self.activation_fn, self._init_bias, self._n_days, self._d_day)
 
     def _build(self, lr_schedule) -> None:
         super()._build(lr_schedule)
-        self.action_net = nn.Identity()               # the actor latent already holds the n log-odds
-        nn.init.orthogonal_(self.mlp_extractor.score.weight, gain=0.01)
-        nn.init.constant_(self.mlp_extractor.score.bias, self._init_bias)
+        self.action_net = nn.Identity()               # the actor latent already holds the log-odds
+        scores = [self.mlp_extractor.score] + ([self.mlp_extractor.day_score] if self._n_days else [])
+        for sc in scores:
+            nn.init.orthogonal_(sc.weight, gain=0.01)
+            nn.init.constant_(sc.bias, self._init_bias)
         self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
 
     def _get_constructor_parameters(self):
         data = super()._get_constructor_parameters()
-        data.update(n_emp=self._n_emp, hidden=self._hidden, value_hidden=self._value_hidden,
+        data.update(n_emp=self._n_emp, n_days=self._n_days, hidden=self._hidden, value_hidden=self._value_hidden,
                     init_bias=self._init_bias)
         return data
