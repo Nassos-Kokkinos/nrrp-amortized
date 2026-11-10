@@ -1,0 +1,162 @@
+{
+  "training_run": "bc12-lns",
+  "checkpoint": "best.zip",
+  "args": {
+    "name": "bc12-lns",
+    "steps_list": [
+      2,
+      4,
+      8
+    ],
+    "step_time": null,
+    "workers": 8,
+    "checkpoint": "best",
+    "seed": 0,
+    "runs": "runs",
+    "results": "results/lns"
+  },
+  "machine": {
+    "platform": "macOS-26.3-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "cpu_count": 10,
+    "python": "3.14.10",
+    "numpy": "2.5.4",
+    "torch": "2.15.0",
+    "gymnasium": "1.4.0",
+    "stable_baselines3": "2.9.2",
+    "sb3_contrib": "2.9.2",
+    "ortools": "9.15.6755"
+  },
+  "finished": "2026-11-11 00:50:02 +0200",
+  "summary": {
+    "2": {
+      "T_infer": 0.7069000000000001,
+      "learned_lns": {
+        "mean_J_feasible": 5112.9375,
+        "feasible": 1.0
+      },
+      "random_lns": {
+        "mean_J_feasible": 5118.0625,
+        "feasible": 1.0
+      },
+      "repair_x0": {
+        "mean_J_feasible": 5057.375,
+        "feasible": 1.0
+      },
+      "cp_scratch": {
+        "mean_J_feasible": 6023.9375,
+        "feasible": 1.0
+      },
+      "cp_hint": {
+        "mean_J_feasible": 5041.9375,
+        "feasible": 1.0
+      },
+      "vs_random_lns": [
+        6,
+        5,
+        5
+      ],
+      "vs_repair_x0": [
+        5,
+        4,
+        7
+      ],
+      "vs_cp_scratch": [
+        10,
+        2,
+        4
+      ],
+      "vs_cp_hint": [
+        5,
+        5,
+        6
+      ]
+    },
+    "4": {
+      "T_infer": 1.40211875,
+      "learned_lns": {
+        "mean_J_feasible": 5080.875,
+        "feasible": 1.0
+      },
+      "random_lns": {
+        "mean_J_feasible": 5102.0,
+        "feasible": 1.0
+      },
+      "repair_x0": {
+        "mean_J_feasible": 4874.25,
+        "feasible": 1.0
+      },
+      "cp_scratch": {
+        "mean_J_feasible": 5021.3125,
+        "feasible": 1.0
+      },
+      "cp_hint": {
+        "mean_J_feasible": 4879.5625,
+        "feasible": 1.0
+      },
+      "vs_random_lns": [
+        6,
+        6,
+        4
+      ],
+      "vs_repair_x0": [
+        1,
+        3,
+        12
+      ],
+      "vs_cp_scratch": [
+        3,
+        2,
+        11
+      ],
+      "vs_cp_hint": [
+        0,
+        2,
+        14
+      ]
+    },
+    "8": {
+      "T_infer": 2.7689125000000003,
+      "learned_lns": {
+        "mean_J_feasible": 5074.6875,
+        "feasible": 1.0
+      },
+      "random_lns": {
+        "mean_J_feasible": 4979.5625,
+        "feasible": 1.0
+      },
+      "repair_x0": {
+        "mean_J_feasible": 4712.0625,
+        "feasible": 1.0
+      },
+      "cp_scratch": {
+        "mean_J_feasible": 4690.5625,
+        "feasible": 1.0
+      },
+      "cp_hint": {
+        "mean_J_feasible": 4708.875,
+        "feasible": 1.0
+      },
+      "vs_random_lns": [
+        3,
+        2,
+        11
+      ],
+      "vs_repair_x0": [
+        0,
+        3,
+        13
+      ],
+      "vs_cp_scratch": [
+        1,
+        2,
+        13
+      ],
+      "vs_cp_hint": [
+        0,
+        3,
+        13
+      ]
+    }
+  }
+}
