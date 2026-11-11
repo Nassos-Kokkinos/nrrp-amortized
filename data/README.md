@@ -59,5 +59,6 @@ lower for some instances (e.g. Instance8: best known 1300, files 1308, 1314,
 ## Not yet supported
 
 Veenaas & Buchwitz NRRP dataset (HICSS 2026: INRC-II-based format, 14- and
-28-day rosters with disruption scenarios), NSPLib, INRC-II. Disruptions ξ are
-generated for every family (`nrrp/generator.py`, provisional).
+28-day rosters with disruption scenarios), NSPLib, INRC-II. Disruptions ξ on a published roster are drawn by
+`nrrp/disruption.py`; `nrrp/generator.py` gives synthetic instances and random
+contexts.
