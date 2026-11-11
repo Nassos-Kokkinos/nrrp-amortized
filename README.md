@@ -89,10 +89,21 @@ done
 
 (The committed seed-0 folders are named without the `-s0` suffix.)
 
-**3. Constructive re-rostering (Instances 5 and 8)**
+**3. Why absences are credited (Remark 3)**
 
-x° is the published solution with the lowest value (`data/raw/solutions/`).
-Small disruptions: 1–2 absent employees for 1–7 days; big: 3–5 for 3–7 days.
+How many disruptions leave no feasible roster, with the absence credit and with
+the benchmark's constraints read literally:
+
+```bash
+python scripts/feasibility_rate.py --instance data/raw/Instance5.txt --n-absent 1 2 --absence-days 1 7
+python scripts/feasibility_rate.py --instance data/raw/Instance5.txt --n-absent 1 2 --absence-days 1 1
+```
+
+**4. Constructive re-rostering (Instances 5 and 8)**
+
+x° is the published solution with the lowest value (`data/raw/solutions/`), which
+is not always the best known value. Small disruptions: 1–2 absent employees for
+1–7 days; big: 3–5 for 3–7 days.
 
 ```bash
 B=(--budgets 0 0.1 0.25 0.5 1 2 5)
@@ -109,7 +120,7 @@ python scripts/eval_repair.py --name bc8-big-p5 "${B[@]}" --checkpoint best
 python scripts/eval_repair.py --name bc8-big-p5 "${B[@]}" --source published
 ```
 
-**4. Learned LNS (Instances 8 and 12, big disruptions)**
+**5. Learned LNS (Instances 8 and 12, big disruptions)**
 
 ```bash
 python scripts/train_lns.py --name bc8-lns1 --pools-from bc8-big-p5 --step-time 0.1 --timesteps 50000
@@ -125,7 +136,7 @@ python scripts/eval_lns.py --name bc12-lns --steps-list 2 4 8
 `eval_lns.py` runs the learned LNS, a random LNS, the repair of x°, CP-SAT from
 scratch and CP-SAT hinted with x°, all with the same time per context.
 
-**5. Figures**
+**6. Figures**
 
 ```bash
 python scripts/plot_paper.py      # results/figures/fig{1,2,3}_*.{pdf,png}, win_tie_loss.csv
@@ -145,6 +156,7 @@ It reads only committed results; nothing is re-run.
 | `python scripts/train.py --name NAME --size n m k ...` | MaskablePPO on a pool of synthetic instances (construction); Ctrl+C saves, `--resume` continues |
 | `python scripts/train.py --name NAME --reroster INSTANCE ...` | the same in the re-rostering regime: fresh disruption per episode, held-out contexts; `--published-prior B0`, `--val-pool N` (best checkpoint on validation contexts) |
 | `python scripts/eval_repair.py --name NAME --budgets ...` | policy, policy + repair, CP-SAT from scratch and hinted with x°, at the same T_infer; `--source published` repairs x° instead of the policy's roster, `--checkpoint best` |
+| `python scripts/feasibility_rate.py --instance FILE ...` | share of disruptions with no feasible roster, with and without the absence credit; results to `results/feasibility/` |
 | `python scripts/train_lns.py --name NAME ...` | learned LNS; `--release employees` or `both` (employees and days) |
 | `python scripts/eval_lns.py --name NAME --steps-list ...` | learned LNS against random LNS, repair of x°, CP-SAT from scratch and hinted, same budget |
 | `python scripts/plot_results.py {cp,train,grid} ...` | per-run diagnostic figures |
@@ -218,7 +230,7 @@ It reads only committed results; nothing is re-run.
 `results/<experiment>/<run>/` holds one run: `results.csv` (written row by row,
 so an interrupted run keeps what it finished) and `run.json` (machine, versions,
 parameters, summary). Experiments: `cp_baseline`, `train`, `repair`,
-`train_lns`, `lns`, and `figures` for the paper. Runs are committed; runs named
+`train_lns`, `lns`, `feasibility`, and `figures` for the paper. Runs are committed; runs named
 `provisional-*` are not (timings measured where they do not count, e.g. in a
 VM). Timings for the paper are measured natively on the Mac above.
 
