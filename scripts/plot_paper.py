@@ -165,9 +165,9 @@ def fig1():
         ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:g}"))
         ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
         ax.set_title(title, fontsize=10, loc="left")
-        ax.set_xlabel("Total response time T_infer (s, log scale)", fontsize=9)
+        ax.set_xlabel(r"Total response time $T_{\mathrm{infer}}$ (s, log scale)", fontsize=9)
         style_axes(ax)
-    axes[0].set_ylabel("Mean J over 16 contexts (lower is better)", fontsize=9)
+    axes[0].set_ylabel("Mean J over 16 evaluation contexts (lower is better)", fontsize=9)
     handles = [plt.Line2D([], [], color=c, marker=mk, linewidth=2, markersize=6, markeredgecolor="white",
                           label=lb) for lb, c, mk in STYLE.values()]
     fig.legend(handles=handles, loc="lower center", ncol=5, frameon=False, fontsize=8.5,
@@ -206,7 +206,7 @@ def fig2():
     ax = axes[1]
     curve(ax, R / "train" / "bc5-rr" / "progress.csv", "steps", "J_det", OTHER, "No prior", 1e-6, dashed=True)
     curve(ax, R / "train" / "bc5-rr-prior5" / "progress.csv", "steps", "J_det", STYLE["constructive"],
-          "Prior b0 = 5 (Fig. 1)", 1e-6)
+          "Prior b$_0$ = 5", 1e-6)
     x0 = np.mean([num(r["J"]) for r in rows(R / "repair" / "bc5-rr-published-anytime" / "results.csv")
                   if num(r["tau_cp"]) == 0])                 # all contexts, as J_det averages all
     hline(ax, x0, "x° without the absent", STYLE["repair_x0"][1])
@@ -214,12 +214,12 @@ def fig2():
     ax.legend(frameon=False, fontsize=8, loc="upper right", labelcolor=INK)
 
     # (c), (d), (e) learned LNS
-    for ax, names, title in ((axes[2], (("bc5-lns", STYLE["learned_lns"], "Employees and days (Fig. 1)", False),),
+    for ax, names, title in ((axes[2], (("bc5-lns", STYLE["learned_lns"], "Employees and days", False),),
                               "(c) Learned LNS (employees and days), Instance 5"),
                              (axes[3], (("bc8-lns1", OTHER, "Employees only", True),
-                                        ("bc8-lns2", STYLE["learned_lns"], "Employees and days (Fig. 1)", False)),
+                                        ("bc8-lns2", STYLE["learned_lns"], "Employees and days", False)),
                               "(d) Learned LNS, Instance 8"),
-                             (axes[4], (("bc12-lns", STYLE["learned_lns"], "Employees and days (Fig. 1)", False),),
+                             (axes[4], (("bc12-lns", STYLE["learned_lns"], "Employees and days", False),),
                               "(e) Learned LNS (employees and days), Instance 12")):
         start = None
         for name, style, label, dashed in names:
@@ -229,7 +229,7 @@ def fig2():
         ax.set_title(title + "\nafter K = 8 neighbourhood steps", fontsize=10, loc="left")
         if len(names) > 1:                                   # one series: the title names it
             ax.legend(frameon=False, fontsize=8, loc="upper left", bbox_to_anchor=(0.0, 0.9), labelcolor=INK)
-    axes[0].set_ylabel("Mean J on held-out contexts", fontsize=9)
+    axes[0].set_ylabel("Mean J on evaluation contexts", fontsize=9)
     for ax in axes[:2]:
         ax.set_xlabel("Training steps (millions)", fontsize=9)
     for ax in axes[2:]:
@@ -266,11 +266,11 @@ def fig3():
     for inst, policy, baseline in (("Instance 5", "bc5-rr-prior5-anytime", "bc5-rr-published-anytime"),
                                    ("Instance 8", "bc8-big-p5-bestckpt-anytime", "bc8-big-p5-published-anytime")):
         for tau, wtl in sorted(head_to_head(policy, baseline).items()):
-            table.append((inst, "Constructive RL", f"τ_cp = {tau:g} s", *wtl))
+            table.append((inst, "Constructive RL, b0 = 5", f"τ_cp = {tau:g} s", *wtl))
     for inst, name in (("Instance 5", "bc5-lns"), ("Instance 8", "bc8-lns2"), ("Instance 12", "bc12-lns")):
         summ = json.loads((R / "lns" / name / "run.json").read_text())["summary"]
         for K, s in sorted(summ.items(), key=lambda kv: int(kv[0])):
-            table.append((inst, "Learned LNS", f"K = {K} ({s['T_infer']:.2f} s)", *s["vs_repair_x0"]))
+            table.append((inst, "Learned LNS, employees and days", f"K = {K} ({s['T_infer']:.2f} s)", *s["vs_repair_x0"]))
     OUT.mkdir(parents=True, exist_ok=True)
     with (OUT / "win_tie_loss.csv").open("w", newline="") as fh:
         w = csv.writer(fh)
@@ -297,10 +297,11 @@ def fig3():
                         color="white" if color != TIE else INK)
             left += val
     ax.set_yticks(y)
-    ax.set_yticklabels([f"{inst} · {method} · {budget}" for inst, method, budget, *_ in table], fontsize=8)
+    ax.set_yticklabels([f"{inst} · {method} · {budget}".replace("τ_cp", r"$\tau_{\mathrm{cp}}$").replace("b0", r"b$_0$")
+                        for inst, method, budget, *_ in table], fontsize=8)
     ax.set_xlim(0, 16)
     ax.set_ylim(y[-1] - 0.7, 0.7)
-    ax.set_xlabel("Contexts (of 16): win / tie / loss against the repair of x° at the same time", fontsize=9)
+    ax.set_xlabel("Contexts (of 16): win / tie / loss against the repair of x° at the same budget", fontsize=9)
     ax.axvline(0.6 * 16, color=INK, linestyle=(0, (4, 3)), linewidth=1, zorder=3)
     ax.annotate("success criterion:\n60% wins", (0.6 * 16, 0.7), xytext=(4, 2), textcoords="offset points",
                 ha="left", va="bottom", fontsize=7.5, color=MUTED, annotation_clip=False)
