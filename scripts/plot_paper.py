@@ -226,7 +226,7 @@ def fig2():
             rr = curve(ax, R / "train_lns" / name / "progress.csv", "steps", "J_det", style, label, 1e-3, dashed)
             start = num(rr[0]["J_start"])
         hline(ax, start, "start: x° without the absent", STYLE["repair_x0"][1])
-        ax.set_title(title + "\nafter K = 8 neighbourhood steps", fontsize=10, loc="left")
+        ax.set_title(title + "\nafter B = 8 rounds", fontsize=10, loc="left")
         if len(names) > 1:                                   # one series: the title names it
             ax.legend(frameon=False, fontsize=8, loc="upper left", bbox_to_anchor=(0.0, 0.9), labelcolor=INK)
     axes[0].set_ylabel("Mean J on evaluation contexts", fontsize=9)
@@ -270,7 +270,7 @@ def fig3():
     for inst, name in (("Instance 5", "bc5-lns"), ("Instance 8", "bc8-lns2"), ("Instance 12", "bc12-lns")):
         summ = json.loads((R / "lns" / name / "run.json").read_text())["summary"]
         for K, s in sorted(summ.items(), key=lambda kv: int(kv[0])):
-            table.append((inst, "Learned LNS, employees and days", f"K = {K} ({s['T_infer']:.2f} s)", *s["vs_repair_x0"]))
+            table.append((inst, "Learned LNS, employees and days", f"B = {K} ({s['T_infer']:.2f} s)", *s["vs_repair_x0"]))
     OUT.mkdir(parents=True, exist_ok=True)
     with (OUT / "win_tie_loss.csv").open("w", newline="") as fh:
         w = csv.writer(fh)
