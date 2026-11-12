@@ -39,7 +39,7 @@
     "ortools": "9.15.6755"
   },
   "disruptions": 60,
-  "seconds": 223.9,
+  "seconds": 216.6,
   "summary": {
     "credited": {
       "feasible": 60,
