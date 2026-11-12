@@ -105,6 +105,12 @@ the benchmark's constraints read literally:
 ```bash
 python scripts/feasibility_rate.py --instance data/raw/Instance5.txt --n-absent 1 2 --absence-days 1 7
 python scripts/feasibility_rate.py --instance data/raw/Instance5.txt --n-absent 1 2 --absence-days 1 1
+for i in 5 8 12; do
+  python scripts/feasibility_rate.py --instance data/raw/Instance$i.txt --n-absent 3 5 --absence-days 3 7
+done
+for i in 8 12; do
+  python scripts/feasibility_rate.py --instance data/raw/Instance$i.txt --n-absent 1 2 --absence-days 1 7
+done
 ```
 
 **4. Constructive re-rostering (Instances 5 and 8)**
@@ -126,7 +132,15 @@ python scripts/train.py --name bc8-big-p5 --reroster data/raw/Instance8.txt --n-
     --published-prior 5 --lr 3e-5 --val-pool 16 --cp-time-limit 60 "${C[@]}"
 python scripts/eval_repair.py --name bc8-big-p5 "${B[@]}" --checkpoint best
 python scripts/eval_repair.py --name bc8-big-p5 "${B[@]}" --source published
+# the repair of x° with a bounded neighbourhood: V^∅ only below rho (kappa = 0)
+python scripts/eval_repair.py --name bc5-rr --source published --budgets 0.1 0.25 0.5 1 2 5 --empty-kappa 0
+python scripts/eval_repair.py --name bc8-big-p5 --source published --budgets 0.1 0.25 0.5 1 2 5 --empty-kappa 0
 ```
+
+With the default `--empty-kappa` (kappa = 1), V^∅ frees every pair below rho + 1, which on these
+instances is every pair on the open days: the repair is then CP-SAT on the whole re-rostering
+problem warm-started from x°. With `--empty-kappa 0` the neighbourhood is bounded (about 15-20%
+of the variables).
 
 **5. Learned LNS (Instance 5, small disruptions; Instances 8 and 12, big)**
 

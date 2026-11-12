@@ -1,0 +1,57 @@
+{
+  "args": {
+    "instance": "data/raw/Instance8.txt",
+    "published": null,
+    "n_absent": [
+      3,
+      5
+    ],
+    "absence_days": [
+      3,
+      7
+    ],
+    "mu": 1.0,
+    "n": 60,
+    "seed0": 300000,
+    "time_limit": 10.0,
+    "workers": 8,
+    "name": null,
+    "results": "results/feasibility"
+  },
+  "reroster": {
+    "instance": "data/raw/Instance8.txt",
+    "published": "data/raw/solutions/Instance8.Solution.1308.roster",
+    "n_absent": [
+      3,
+      5
+    ],
+    "days": [
+      3,
+      7
+    ],
+    "mu": 1.0,
+    "first_day": 1
+  },
+  "machine": {
+    "platform": "macOS-26.3-arm64-arm-64bit-Mach-O",
+    "cpu_count": 10,
+    "python": "3.14.10",
+    "ortools": "9.15.6755"
+  },
+  "disruptions": 60,
+  "seconds": 287.9,
+  "summary": {
+    "credited": {
+      "feasible": 60,
+      "infeasible": 0,
+      "undecided": 0,
+      "infeasible_share": 0.0
+    },
+    "uncredited": {
+      "feasible": 0,
+      "infeasible": 60,
+      "undecided": 0,
+      "infeasible_share": 1.0
+    }
+  }
+}
