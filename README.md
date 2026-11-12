@@ -28,13 +28,21 @@ configuration reaches the success criterion fixed before the last runs (60% of
 the held-out contexts won against the repair of x° at the same time); the best
 is 5 wins out of 16. Figures and the per-row counts are in `results/figures/`.
 
-| Instance (disruptions) | CP-SAT, 60 s | repair of x° | constructive RL + repair | learned LNS |
-|---|---|---|---|---|
-| 5 (small), T = 0.1 s | 1385 | 1417 | 1503 | – |
-| 8 (big), T = 0.56 s | 2251 | 2316 | – | 2387 |
-| 12 (big), T = 2.77 s | 4748 | 4712 | – | 5075 |
+| Instance (disruptions) | T | CP-SAT, 60 s | repair of x° | constructive RL + repair | learned LNS |
+|---|---|---|---|---|---|
+| 5 (small) | 0.1 s | 1385 | 1417 | 1503 | |
+| 5 (small) | 0.29 s | 1385 | 1406 | | 1434 |
+| 8 (big) | 0.5 s | 2251 | 2313 | 2329 | |
+| 8 (big) | 0.56 s | 2251 | 2316 | | 2387 |
+| 12 (big) | 2.77 s | 4748 | 4712 | not run | 5075 |
 
-Mean J over 16 held-out contexts; lower is better. Timings were measured on an
+Mean J over 16 held-out contexts; lower is better. T is the total response
+time given to every method in that comparison (for the constructive policy,
+the repair budget tau_cp; its response time also includes the policy's own
+inference). The rows of one instance come from separate evaluations, so each
+compares a learned method with the repair of x° at its own budget. The
+constructive policy was not run on Instance 12: its episodes there average 662
+decisions, twice as many as on Instance 8, where it already failed. Timings were measured on an
 Apple silicon Mac (arm64, 10 cores, macOS 26.3, Python 3.14, OR-Tools 9.15,
 8 CP-SAT workers).
 
@@ -120,7 +128,7 @@ python scripts/eval_repair.py --name bc8-big-p5 "${B[@]}" --checkpoint best
 python scripts/eval_repair.py --name bc8-big-p5 "${B[@]}" --source published
 ```
 
-**5. Learned LNS (Instances 8 and 12, big disruptions)**
+**5. Learned LNS (Instance 5, small disruptions; Instances 8 and 12, big)**
 
 ```bash
 python scripts/train_lns.py --name bc8-lns1 --pools-from bc8-big-p5 --step-time 0.1 --timesteps 50000
@@ -128,6 +136,8 @@ python scripts/train_lns.py --name bc8-lns2 --pools-from bc8-big-p5 --step-time 
     --release both
 python scripts/train_lns.py --name bc12-lns --reroster data/raw/Instance12.txt --n-absent 3 5 --absence-days 3 7 \
     --step-time 0.5 --timesteps 20000 --eval-every 4000 --release both
+python scripts/train_lns.py --name bc5-lns --pools-from bc5-rr --step-time 0.1 --timesteps 50000 --release both
+python scripts/eval_lns.py --name bc5-lns --steps-list 2 4 8 16
 python scripts/eval_lns.py --name bc8-lns1 --steps-list 2 4 8 16
 python scripts/eval_lns.py --name bc8-lns2 --steps-list 2 4 8 16
 python scripts/eval_lns.py --name bc12-lns --steps-list 2 4 8

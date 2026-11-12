@@ -8,7 +8,7 @@ Fig. 1  Re-rostering on Burke & Curtois Instances 5, 8, 12 (big disruptions on 8
         the 16 held-out contexts against the mean total response time T_infer, for every method at
         the same T_infer (Eqs. (28), (42)); the dashed line is the CP-SAT reference (60 s).
 Fig. 2  Training curves: construction on 40x28x3, the constructive re-rostering policy on Instance 5
-        (with and without the prior towards x°), the learned LNS on Instances 8 and 12.
+        (with and without the prior towards x°), the learned LNS on Instances 5, 8 and 12.
 Fig. 3  Win / tie / loss of the learned methods against the repair of x° (no learning), per context
         (16 per row), at the same time budget.
 
@@ -119,6 +119,7 @@ def fig1():
             "cp_hint": repair_curves("bc5-rr-published-anytime")["cp_hint"],
             "cp_scratch": repair_curves("bc5-rr-published-anytime")["cp_scratch"],
             "constructive": repair_curves("bc5-rr-prior5-anytime")["source"],
+            "learned_lns": lns_curves("bc5-lns")["learned_lns"],
         }, reference("bc5-rr-published-anytime", "repair")),
         ("Instance 8 (30×28×4), big disruptions", {
             "repair_x0": repair_curves("bc8-big-p5-published-anytime")["source"],
@@ -177,7 +178,7 @@ def fig1():
 
 # ----------------------------------------------------------------------------- figure 2
 def fig2():
-    fig, axes = plt.subplots(1, 4, figsize=(15, 3.7))
+    fig, axes = plt.subplots(1, 5, figsize=(18.5, 3.7))
     OTHER = ("Other variant", MUTED, "s")
 
     def curve(ax, path, x, y, style, label=None, scale=1.0, dashed=False):
@@ -207,17 +208,19 @@ def fig2():
     curve(ax, R / "train" / "bc5-rr-prior5" / "progress.csv", "steps", "J_det", STYLE["constructive"],
           "Prior b0 = 5 (Fig. 1)", 1e-6)
     x0 = np.mean([num(r["J"]) for r in rows(R / "repair" / "bc5-rr-published-anytime" / "results.csv")
-                  if num(r["tau_cp"]) == 0 and r["feasible"] == "True"])
+                  if num(r["tau_cp"]) == 0])                 # all contexts, as J_det averages all
     hline(ax, x0, "x° without the absent", STYLE["repair_x0"][1])
     ax.set_title("(b) Constructive RL, Instance 5\npolicy alone (no repair)", fontsize=10, loc="left")
     ax.legend(frameon=False, fontsize=8, loc="upper right", labelcolor=INK)
 
-    # (c), (d) learned LNS
-    for ax, names, title in ((axes[2], (("bc8-lns1", OTHER, "Employees only", True),
+    # (c), (d), (e) learned LNS
+    for ax, names, title in ((axes[2], (("bc5-lns", STYLE["learned_lns"], "Employees and days (Fig. 1)", False),),
+                              "(c) Learned LNS (employees and days), Instance 5"),
+                             (axes[3], (("bc8-lns1", OTHER, "Employees only", True),
                                         ("bc8-lns2", STYLE["learned_lns"], "Employees and days (Fig. 1)", False)),
-                              "(c) Learned LNS, Instance 8"),
-                             (axes[3], (("bc12-lns", STYLE["learned_lns"], "Employees and days (Fig. 1)", False),),
-                              "(d) Learned LNS (employees and days), Instance 12")):
+                              "(d) Learned LNS, Instance 8"),
+                             (axes[4], (("bc12-lns", STYLE["learned_lns"], "Employees and days (Fig. 1)", False),),
+                              "(e) Learned LNS (employees and days), Instance 12")):
         start = None
         for name, style, label, dashed in names:
             rr = curve(ax, R / "train_lns" / name / "progress.csv", "steps", "J_det", style, label, 1e-3, dashed)
@@ -264,7 +267,7 @@ def fig3():
                                    ("Instance 8", "bc8-big-p5-bestckpt-anytime", "bc8-big-p5-published-anytime")):
         for tau, wtl in sorted(head_to_head(policy, baseline).items()):
             table.append((inst, "Constructive RL", f"τ_cp = {tau:g} s", *wtl))
-    for inst, name in (("Instance 8", "bc8-lns2"), ("Instance 12", "bc12-lns")):
+    for inst, name in (("Instance 5", "bc5-lns"), ("Instance 8", "bc8-lns2"), ("Instance 12", "bc12-lns")):
         summ = json.loads((R / "lns" / name / "run.json").read_text())["summary"]
         for K, s in sorted(summ.items(), key=lambda kv: int(kv[0])):
             table.append((inst, "Learned LNS", f"K = {K} ({s['T_infer']:.2f} s)", *s["vs_repair_x0"]))
